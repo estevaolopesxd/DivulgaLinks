@@ -18,7 +18,6 @@ import {
 import { Package, Megaphone, MessageSquare, MousePointerClick, TrendingUp, ShoppingBag } from 'lucide-react';
 import { dashboardApi } from '../services/api';
 import { StatCard, Card, CardHeader } from '../components/ui/Card';
-import { Badge, statusToBadgeVariant, statusLabel } from '../components/ui/Badge';
 import { PageLoader } from '../components/ui/LoadingSpinner';
 import type { DashboardStats } from '../types';
 
