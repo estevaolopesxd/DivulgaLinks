@@ -32,7 +32,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY package*.json ./
 
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x docker-entrypoint.sh
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 
 RUN mkdir -p uploads logs whatsapp_sessions && chown -R nodejs:nodejs /app
 
