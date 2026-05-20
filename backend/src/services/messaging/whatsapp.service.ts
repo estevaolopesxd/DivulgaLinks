@@ -221,7 +221,7 @@ export const getChannels = async (
   try {
     // Fetch newsletter/channel metadata from sock store
     // Channels use the @newsletter JID suffix
-    const chats = await entry.sock.fetchNewsletterInfo?.('') ?? [];
+    const chats = await (entry.sock as any).fetchNewsletterInfo?.('') ?? [];
     if (Array.isArray(chats)) {
       return chats.map((c: any) => ({ id: c.id, name: c.name ?? c.id }));
     }

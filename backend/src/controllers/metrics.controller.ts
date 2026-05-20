@@ -111,7 +111,6 @@ export const getCampaignMetrics = async (
       by: ['campaignId'],
       where,
       _count: { id: true },
-      _sum: {},
     });
 
     const campaignIds = logs.map((l) => l.campaignId);

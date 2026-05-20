@@ -12,7 +12,7 @@ const timeString = z
   .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Formato inválido — use HH:mm')
   .optional();
 
-const campaignSchema = z.object({
+const baseCampaignSchema = z.object({
   name: z.string().min(2).max(200),
   description: z.string().max(1000).optional(),
   messageTemplate: z.string().min(10),
@@ -28,7 +28,9 @@ const campaignSchema = z.object({
     .array(z.number().int().min(0).max(6))
     .optional()
     .default([]),
-}).refine(
+});
+
+const campaignSchema = baseCampaignSchema.refine(
   (d) => !(d.allowedStartTime && !d.allowedEndTime) && !(!d.allowedStartTime && d.allowedEndTime),
   { message: 'Informe início e fim do horário juntos', path: ['allowedEndTime'] },
 );
@@ -165,7 +167,7 @@ export const updateCampaign = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const data = campaignSchema.partial().parse(req.body);
+    const data = baseCampaignSchema.partial().parse(req.body);
 
     const existing = await prisma.campaign.findUnique({ where: { id } });
     if (!existing) throw new AppError('Campaign not found', 404);
