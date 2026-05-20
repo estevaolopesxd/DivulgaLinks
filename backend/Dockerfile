@@ -5,8 +5,8 @@ RUN apk add --no-cache python3 make g++ vips-dev
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+COPY package*.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
 
 COPY prisma ./prisma/
 RUN npx prisma generate

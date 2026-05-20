@@ -1,2 +1,33 @@
+# Claude Code
 /.claude
-/.env.example
+
+# Variáveis de ambiente (contêm segredos — NUNCA commitar)
+.env
+.env.local
+.env.*.local
+
+# Dependências
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build
+backend/dist/
+frontend/dist/
+
+# Logs
+*.log
+backend/logs/
+npm-debug.log*
+
+# Uploads e sessões WhatsApp (dados de runtime)
+backend/uploads/
+backend/whatsapp_sessions/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

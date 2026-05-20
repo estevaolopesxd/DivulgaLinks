@@ -7,8 +7,8 @@ ARG VITE_SOCKET_URL=http://localhost:3001
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_SOCKET_URL=$VITE_SOCKET_URL
 
-COPY package*.json ./
-RUN npm ci
+COPY package*.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
 
 COPY . .
 RUN npm run build
