@@ -31,10 +31,13 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY package*.json ./
 
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x docker-entrypoint.sh
+
 RUN mkdir -p uploads logs whatsapp_sessions && chown -R nodejs:nodejs /app
 
 USER nodejs
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["./docker-entrypoint.sh"]
