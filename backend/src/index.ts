@@ -1,0 +1,128 @@
+import 'dotenv/config';
+import http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+import { env } from './config/env';
+import { createApp } from './app';
+import { prisma } from './config/database';
+import { connectRedis } from './config/redis';
+import { logger } from './utils/logger';
+import { setSocketIO, restoreSessions } from './services/whatsapp.service';
+import telegramService from './services/telegram.service';
+import { startWorker, stopWorker } from './workers/campaign.worker';
+
+const bootstrap = async (): Promise<void> => {
+  // 1. Connect to Redis
+  try {
+    await connectRedis();
+    logger.info('Redis connected');
+  } catch (error) {
+    logger.error('Failed to connect to Redis', { error });
+    process.exit(1);
+  }
+
+  // 2. Connect to Postgres via Prisma
+  try {
+    await prisma.$connect();
+    logger.info('Database connected');
+  } catch (error) {
+    logger.error('Failed to connect to database', { error });
+    process.exit(1);
+  }
+
+  // 3. Create Express app
+  const app = createApp();
+
+  // 4. Create HTTP server
+  const server = http.createServer(app);
+
+  // 5. Attach Socket.IO for real-time QR code streaming
+  const io = new SocketIOServer(server, {
+    cors: {
+      origin: [env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'],
+      methods: ['GET', 'POST'],
+      credentials: true,
+    },
+    transports: ['websocket', 'polling'],
+  });
+
+  io.on('connection', (socket) => {
+    logger.debug('Socket.IO client connected', { socketId: socket.id });
+
+    socket.on('disconnect', () => {
+      logger.debug('Socket.IO client disconnected', { socketId: socket.id });
+    });
+
+    // Client can subscribe to specific account updates
+    socket.on('subscribe:whatsapp', (accountId: string) => {
+      socket.join(`whatsapp:${accountId}`);
+    });
+  });
+
+  // 6. Set the Socket.IO instance in the WhatsApp service
+  setSocketIO(io);
+
+  // 7. Start BullMQ campaign worker
+  startWorker();
+  logger.info('BullMQ campaign worker started');
+
+  // 8. Restore active WhatsApp sessions
+  if (env.NODE_ENV === 'production') {
+    restoreSessions().catch((err) =>
+      logger.error('Failed to restore WhatsApp sessions', { error: err }),
+    );
+  }
+
+  // 9. Restore active Telegram bots
+  telegramService.restoreBots().catch((err) =>
+    logger.error('Failed to restore Telegram bots', { error: err }),
+  );
+
+  // 10. Start HTTP server
+  server.listen(env.PORT, () => {
+    logger.info(`DivulgaLinks backend running`, {
+      port: env.PORT,
+      env: env.NODE_ENV,
+      url: `http://localhost:${env.PORT}`,
+    });
+    logger.info(`API available at http://localhost:${env.PORT}/api`);
+    logger.info(`Health check: http://localhost:${env.PORT}/api/health`);
+  });
+
+  // Graceful shutdown
+  const shutdown = async (signal: string): Promise<void> => {
+    logger.info(`Received ${signal}. Shutting down gracefully...`);
+
+    server.close(async () => {
+      logger.info('HTTP server closed');
+
+      await stopWorker();
+      await prisma.$disconnect();
+      logger.info('Database disconnected');
+
+      process.exit(0);
+    });
+
+    // Force shutdown after 30 seconds
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 30000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled promise rejection', { reason });
+  });
+
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception', { error });
+    process.exit(1);
+  });
+};
+
+bootstrap().catch((error) => {
+  console.error('Fatal error during bootstrap:', error);
+  process.exit(1);
+});

@@ -1,0 +1,173 @@
+_format_version: "1.1"
+
+###
+### Consumers / API Keys
+### Os valores ${SUPABASE_ANON_KEY} e ${SUPABASE_SERVICE_KEY} são
+### substituídos pelo entrypoint do Kong em tempo de execução.
+###
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: ${SUPABASE_ANON_KEY}
+  - username: service_role
+    keyauth_credentials:
+      - key: ${SUPABASE_SERVICE_KEY}
+
+###
+### Access Control List
+###
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
+###
+### Services / Routes
+###
+services:
+
+  ## ── Auth: rotas abertas (sem autenticação) ─────────────────────────
+  - name: auth-v1-open
+    url: http://supabase-auth:9999/verify
+    routes:
+      - name: auth-v1-open
+        strip_path: true
+        paths:
+          - /auth/v1/verify
+    plugins:
+      - name: cors
+
+  - name: auth-v1-open-callback
+    url: http://supabase-auth:9999/callback
+    routes:
+      - name: auth-v1-open-callback
+        strip_path: true
+        paths:
+          - /auth/v1/callback
+    plugins:
+      - name: cors
+
+  - name: auth-v1-open-authorize
+    url: http://supabase-auth:9999/authorize
+    routes:
+      - name: auth-v1-open-authorize
+        strip_path: true
+        paths:
+          - /auth/v1/authorize
+    plugins:
+      - name: cors
+
+  ## ── Auth: rotas protegidas ─────────────────────────────────────────
+  - name: auth-v1
+    url: http://supabase-auth:9999/
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## ── REST API (PostgREST) ───────────────────────────────────────────
+  - name: rest-v1
+    url: http://supabase-rest:3000/
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## ── GraphQL ────────────────────────────────────────────────────────
+  - name: graphql-v1
+    url: http://supabase-rest:3000/rpc/graphql
+    routes:
+      - name: graphql-v1-all
+        strip_path: true
+        paths:
+          - /graphql/v1
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - Content-Profile:graphql_public
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## ── Realtime ───────────────────────────────────────────────────────
+  - name: realtime-v1
+    url: http://supabase-realtime:4000/socket/
+    routes:
+      - name: realtime-v1-all
+        strip_path: true
+        paths:
+          - /realtime/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## ── Storage ────────────────────────────────────────────────────────
+  - name: storage-v1
+    url: http://supabase-storage:5000/
+    routes:
+      - name: storage-v1-all
+        strip_path: true
+        paths:
+          - /storage/v1/
+    plugins:
+      - name: cors
+
+  ## ── Postgres Meta (admin only) ─────────────────────────────────────
+  - name: meta
+    url: http://supabase-meta:8080/
+    routes:
+      - name: meta-all
+        strip_path: true
+        paths:
+          - /pg/
+    plugins:
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin

@@ -1,0 +1,294 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum PlatformType {
+  AMAZON
+  MERCADO_LIVRE
+  SHOPEE
+  ALIEXPRESS
+  AWIN
+  MAGALU
+}
+
+enum WhatsAppStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  QR_PENDING
+}
+
+enum TelegramBotStatus {
+  INACTIVE
+  ACTIVE
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum DestinationType {
+  WHATSAPP_GROUP
+  WHATSAPP_CHANNEL
+  TELEGRAM_GROUP
+  TELEGRAM_CHANNEL
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  FAILED
+  CLICKED
+}
+
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  password    String
+  name        String
+  role        UserRole  @default(USER)
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  campaigns   Campaign[]
+
+  @@map("users")
+}
+
+model Platform {
+  id          String       @id @default(uuid())
+  name        String
+  type        PlatformType
+  affiliateId String
+  apiKey      String?
+  apiSecret   String?
+  isActive    Boolean      @default(true)
+  displayName String?
+  isDefault   Boolean      @default(false)
+  config      Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  products    Product[]
+
+  @@map("platforms")
+}
+
+model Product {
+  id            String    @id @default(uuid())
+  title         String
+  description   String?
+  price         Float
+  originalPrice Float?
+  imageUrl      String?
+  affiliateUrl  String
+  trackingUrl   String?
+  platformId    String?
+  externalId    String?
+  category      String?
+  tags          String[]
+  isActive      Boolean   @default(true)
+  importedAt    DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  platform          Platform?          @relation(fields: [platformId], references: [id])
+  campaignProducts  CampaignProduct[]
+  messageLogs       MessageLog[]
+  clickLogs         ClickLog[]
+
+  @@map("products")
+}
+
+model WhatsAppAccount {
+  id          String         @id @default(uuid())
+  name        String
+  phoneNumber String?
+  status      WhatsAppStatus @default(DISCONNECTED)
+  qrCode      String?        // Temporary QR string during QR_PENDING state
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Session files are stored on disk at whatsapp_sessions/<id>/
+  @@map("whatsapp_accounts")
+}
+
+model TelegramBot {
+  id        String            @id @default(uuid())
+  name      String
+  token     String            @unique
+  username  String?
+  status    TelegramBotStatus @default(INACTIVE)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@map("telegram_bots")
+}
+
+model Campaign {
+  id                    String         @id @default(uuid())
+  name                  String
+  description           String?
+  status                CampaignStatus @default(DRAFT)
+  messageTemplate       String
+  intervalMinutes       Int            @default(60)
+  delayBetweenMessages  Int            @default(5000)
+  startTime             DateTime?
+  endTime               DateTime?
+  platforms             String[]
+  isActive              Boolean        @default(false)
+  createdById           String?
+
+  // ── Horário de funcionamento ───────────────────────────────────────────────
+  allowedStartTime      String?        // "HH:mm" – início da janela de envio
+  allowedEndTime        String?        // "HH:mm" – fim da janela de envio
+  allowedWeekdays       Int[]          // 0=Dom … 6=Sáb; vazio = todos os dias
+
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  createdBy     User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  destinations  CampaignDestination[]
+  products      CampaignProduct[]
+  messageLogs   MessageLog[]
+  schedules     Schedule[]
+
+  @@map("campaigns")
+}
+
+model CampaignDestination {
+  id              String          @id @default(uuid())
+  campaignId      String
+  type            DestinationType
+  destinationId   String
+  destinationName String
+  accountId       String
+  accountType     String
+  isActive        Boolean         @default(true)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("campaign_destinations")
+}
+
+model CampaignProduct {
+  id         String @id @default(uuid())
+  campaignId String
+  productId  String
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, productId])
+  @@map("campaign_products")
+}
+
+model MessageLog {
+  id              String        @id @default(uuid())
+  campaignId      String
+  productId       String?
+  destinationId   String
+  destinationType String
+  message         String
+  status          MessageStatus @default(PENDING)
+  sentAt          DateTime?
+  failedReason    String?
+  createdAt       DateTime      @default(now())
+
+  campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product  Product?  @relation(fields: [productId], references: [id])
+
+  @@map("message_logs")
+}
+
+model ClickLog {
+  id           String   @id @default(uuid())
+  messageLogId String?
+  productId    String
+  shortCode    String
+  ipAddress    String?
+  userAgent    String?
+  clickedAt    DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("click_logs")
+}
+
+model Schedule {
+  id             String    @id @default(uuid())
+  campaignId     String
+  cronExpression String
+  isActive       Boolean   @default(true)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("schedules")
+}
+
+model DestinationConfig {
+  id                 String          @id @default(uuid())
+  destinationId      String          // WhatsApp JID or Telegram chat ID
+  destinationType    DestinationType
+  accountId          String          // WA account ID or Telegram bot ID
+  displayName        String
+
+  // Time restrictions (24h format strings "HH:mm")
+  allowedStartTime   String?         // e.g. "08:00"
+  allowedEndTime     String?         // e.g. "22:00"
+  allowedWeekdays    Int[]           // 0=Sun ... 6=Sat; empty = all days
+
+  // Rate limiting
+  maxMessagesPerDay  Int?
+  minIntervalMinutes Int?
+
+  // Affiliate filter — if set, only products from these platform IDs are sent
+  allowedPlatformIds String[]
+
+  // Per-group message override
+  customTemplate     String?
+
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  dailyStats         DestinationDailyStats[]
+
+  @@unique([destinationId, accountId])
+  @@map("destination_configs")
+}
+
+model DestinationDailyStats {
+  id                  String   @id @default(uuid())
+  destinationConfigId String
+  date                DateTime @db.Date
+  messagesSent        Int      @default(0)
+  messagesFailed      Int      @default(0)
+  clicks              Int      @default(0)
+
+  config DestinationConfig @relation(fields: [destinationConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([destinationConfigId, date])
+  @@map("destination_daily_stats")
+}
