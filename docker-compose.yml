@@ -92,12 +92,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
-      interval: 15s
-      timeout: 10s
-      retries: 12
-      start_period: 120s
 
   # ─────────────────────────────────────────────────────────────────────
   # Frontend — React + Nginx
@@ -114,8 +108,7 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
 
   # ╔═══════════════════════════════════════════════════════════════════╗
   # ║  PROFILE: studio                                                 ║

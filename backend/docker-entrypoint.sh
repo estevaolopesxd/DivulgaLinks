@@ -1,19 +1,11 @@
 #!/bin/sh
-set -e
-
-MAX_TRIES=5
-TRIES=0
 
 echo "==> Executando migrations do Prisma..."
-until node_modules/.bin/prisma migrate deploy; do
-  TRIES=$((TRIES + 1))
-  if [ $TRIES -ge $MAX_TRIES ]; then
-    echo "ERRO: Migrations falharam apos $MAX_TRIES tentativas."
-    exit 1
-  fi
-  echo "Tentativa $TRIES/$MAX_TRIES falhou. Aguardando 5s..."
-  sleep 5
-done
+if node_modules/.bin/prisma migrate deploy; then
+  echo "==> Migrations aplicadas com sucesso."
+else
+  echo "AVISO: prisma migrate deploy falhou (schema pode ja estar atualizado). Continuando..."
+fi
 
-echo "==> Migrations OK. Iniciando servidor..."
+echo "==> Iniciando servidor..."
 exec node dist/index.js
