@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 
 # Baileys needs these for native modules (sharp, etc.)
-RUN apk add --no-cache python3 make g++ vips-dev
+RUN apk add --no-cache python3 make g++ vips-dev openssl
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ RUN npm run build
 # ---- Production image ----
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache vips wget
+RUN apk add --no-cache vips wget openssl
 
 ENV NODE_ENV=production
 
