@@ -2,7 +2,6 @@
 /.claude
 
 # Variáveis de ambiente (contêm segredos — NUNCA commitar)
-.env
 .env.local
 .env.*.local
 
