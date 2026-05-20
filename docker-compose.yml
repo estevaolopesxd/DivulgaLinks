@@ -39,7 +39,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-divulgalinks}"]
       interval: 5s
@@ -86,7 +86,7 @@ services:
       - ./backend/logs:/app/logs
       - whatsapp_sessions:/app/whatsapp_sessions
     ports:
-      - "3001:3001"
+      - "5001:3001"
     depends_on:
       db:
         condition: service_healthy
@@ -107,12 +107,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
-        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:3001}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5001}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:5001}
     container_name: divulgalinks-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       backend:
         condition: service_healthy
