@@ -1,5 +1,3 @@
-version: '3.9'
-
 # ═══════════════════════════════════════════════════════════════════════
 #  DivulgaLinks — Docker Compose
 # ═══════════════════════════════════════════════════════════════════════
@@ -12,10 +10,6 @@ version: '3.9'
 #  ▶ Aplicação + Supabase Studio (UI para gerenciar o banco):
 #      docker-compose --profile studio up -d
 #      Acesse: http://localhost:54323
-#
-#  ▶ Aplicação + Stack Supabase completa (Auth, REST, Realtime, Storage):
-#      docker-compose --profile studio --profile supabase up -d
-#      API Supabase: http://localhost:8000
 #
 #  ▶ Ver logs em tempo real:
 #      docker-compose logs -f backend
@@ -31,38 +25,27 @@ services:
   # ╚═══════════════════════════════════════════════════════════════════╝
 
   # ─────────────────────────────────────────────────────────────────────
-  # Banco de Dados — PostgreSQL com extensões Supabase
+  # Banco de Dados — PostgreSQL 16
   # ─────────────────────────────────────────────────────────────────────
   db:
-    image: supabase/postgres:15.8.1.019
+    image: postgres:16-alpine
     container_name: divulgalinks-db
     restart: unless-stopped
-    command:
-      - postgres
-      - -c
-      - config_file=/etc/postgresql/postgresql.conf
-      - -c
-      - log_min_messages=fatal
     environment:
-      POSTGRES_HOST: /var/run/postgresql
-      PGPORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
-      PGDATABASE: postgres
-      POSTGRES_DB: postgres
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      JWT_EXP: ${JWT_EXPIRY:-3600}
+      POSTGRES_DB: ${POSTGRES_DB:-divulgalinks}
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-divulgalinks}"]
       interval: 5s
       timeout: 5s
       retries: 20
-      start_period: 60s
+      start_period: 10s
 
   # ─────────────────────────────────────────────────────────────────────
   # Redis — filas BullMQ e cache
@@ -93,8 +76,8 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3001
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-divulgalinks123}@db:5432/postgres
-      DIRECT_URL: postgresql://postgres:${POSTGRES_PASSWORD:-divulgalinks123}@db:5432/postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-divulgalinks123}@db:5432/${POSTGRES_DB:-divulgalinks}
+      DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-divulgalinks123}@db:5432/${POSTGRES_DB:-divulgalinks}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
@@ -137,9 +120,10 @@ services:
   # ╔═══════════════════════════════════════════════════════════════════╗
   # ║  PROFILE: studio                                                 ║
   # ║  docker-compose --profile studio up -d                           ║
-  # ║  Supabase Studio em http://localhost:54323                       ║
+  # ║  Interface visual do banco em http://localhost:54323             ║
   # ╚═══════════════════════════════════════════════════════════════════╝
 
+  # Postgres Meta — API REST para metadados do banco (usado pelo Studio)
   supabase-meta:
     image: supabase/postgres-meta:v0.84.2
     container_name: divulgalinks-meta
@@ -151,11 +135,12 @@ services:
     environment:
       PG_META_PORT: 8080
       PG_META_DB_HOST: db
-      PG_META_DB_PORT: ${POSTGRES_PORT:-5432}
-      PG_META_DB_NAME: postgres
-      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: ${POSTGRES_DB:-divulgalinks}
+      PG_META_DB_USER: ${POSTGRES_USER:-postgres}
       PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
 
+  # Supabase Studio — dashboard visual para o banco
   supabase-studio:
     image: supabase/studio:20241014-afd3e48
     container_name: divulgalinks-studio
@@ -173,194 +158,14 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
       DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION:-DivulgaLinks}
       DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT:-divulgalinks}
-      SUPABASE_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
-      SUPABASE_PUBLIC_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      # Sem Supabase API — só acesso ao banco via postgres-meta
+      SUPABASE_URL: http://localhost:8000
+      SUPABASE_PUBLIC_URL: http://localhost:8000
       SUPABASE_ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.dc_X5iR_VP_qroESHHSJJIKCpYqYJByHViw4ih7d_v4}
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UtZGVtbyIsImlhdCI6MTY0MTc2OTIwMCwiZXhwIjoxNzk5NTM1NjAwfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q}
       AUTH_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
       NEXT_PUBLIC_ENABLE_LOGS: "false"
       NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
-
-  # ╔═══════════════════════════════════════════════════════════════════╗
-  # ║  PROFILE: supabase                                               ║
-  # ║  docker-compose --profile studio --profile supabase up -d        ║
-  # ║  Kong API Gateway em http://localhost:8000                       ║
-  # ║  Inbucket (e-mail dev) em http://localhost:54324                 ║
-  # ╚═══════════════════════════════════════════════════════════════════╝
-
-  supabase-kong:
-    image: kong:2.8.1
-    container_name: divulgalinks-kong
-    restart: unless-stopped
-    profiles: [supabase]
-    entrypoint: bash -c 'eval "echo \"$$(cat ~/temp.yml)\"" > ~/kong.yml && /docker-entrypoint.sh kong docker-start'
-    ports:
-      - "${KONG_HTTP_PORT:-8000}:8000/tcp"
-      - "${KONG_HTTPS_PORT:-8443}:8443/tcp"
-    depends_on:
-      supabase-auth:
-        condition: service_healthy
-      supabase-rest:
-        condition: service_started
-    environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
-      KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
-      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
-      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
-      SUPABASE_ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.dc_X5iR_VP_qroESHHSJJIKCpYqYJByHViw4ih7d_v4}
-      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UtZGVtbyIsImlhdCI6MTY0MTc2OTIwMCwiZXhwIjoxNzk5NTM1NjAwfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q}
-    volumes:
-      - ./supabase/docker/kong.yml:/home/kong/temp.yml:ro
-
-  supabase-auth:
-    image: supabase/gotrue:v2.157.1
-    container_name: divulgalinks-auth
-    restart: unless-stopped
-    profiles: [supabase]
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
-      timeout: 5s
-      interval: 5s
-      retries: 5
-      start_period: 20s
-    environment:
-      GOTRUE_API_HOST: 0.0.0.0
-      GOTRUE_API_PORT: 9999
-      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
-      GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:-divulgalinks123}@db:5432/postgres
-      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost}
-      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-}
-      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
-      GOTRUE_JWT_ADMIN_ROLES: service_role
-      GOTRUE_JWT_AUD: authenticated
-      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
-      GOTRUE_JWT_EXP: ${JWT_EXPIRY:-3600}
-      GOTRUE_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP:-true}
-      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
-      GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM:-true}
-      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-admin@example.com}
-      GOTRUE_SMTP_HOST: ${SMTP_HOST:-inbucket}
-      GOTRUE_SMTP_PORT: ${SMTP_PORT:-2500}
-      GOTRUE_SMTP_USER: ${SMTP_USER:-fake_mail_user}
-      GOTRUE_SMTP_PASS: ${SMTP_PASS:-fake_mail_password}
-      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-DivulgaLinks}
-      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
-
-  supabase-rest:
-    image: postgrest/postgrest:v12.2.0
-    container_name: divulgalinks-rest
-    restart: unless-stopped
-    profiles: [supabase]
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:-divulgalinks123}@db:5432/postgres
-      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public,storage,graphql_public}
-      PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      PGRST_DB_USE_LEGACY_GUCS: "false"
-      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY:-3600}
-    command: "postgrest"
-
-  supabase-realtime:
-    image: supabase/realtime:v2.28.32
-    container_name: divulgalinks-realtime
-    restart: unless-stopped
-    profiles: [supabase]
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      PORT: 4000
-      DB_HOST: db
-      DB_PORT: ${POSTGRES_PORT:-5432}
-      DB_USER: supabase_admin
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
-      DB_NAME: postgres
-      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
-      DB_ENC_KEY: supabaserealtime
-      API_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      FLY_ALLOC_ID: fly123
-      FLY_APP_NAME: realtime
-      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq}
-      ERL_AFLAGS: -proto_dist inet_tcp
-      ENABLE_TAILSCALE: "false"
-      DNS_NODES: "''"
-
-  supabase-storage:
-    image: supabase/storage-api:v1.11.13
-    container_name: divulgalinks-storage
-    restart: unless-stopped
-    profiles: [supabase]
-    depends_on:
-      db:
-        condition: service_healthy
-      supabase-rest:
-        condition: service_started
-      imgproxy:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/status"]
-      timeout: 5s
-      interval: 5s
-      retries: 5
-      start_period: 20s
-    environment:
-      ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.dc_X5iR_VP_qroESHHSJJIKCpYqYJByHViw4ih7d_v4}
-      SERVICE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UtZGVtbyIsImlhdCI6MTY0MTc2OTIwMCwiZXhwIjoxNzk5NTM1NjAwfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q}
-      POSTGREST_URL: http://supabase-rest:3000
-      PGRST_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD:-divulgalinks123}@db:5432/postgres
-      FILE_SIZE_LIMIT: 52428800
-      STORAGE_BACKEND: file
-      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
-      TENANT_ID: stub
-      REGION: stub
-      GLOBAL_S3_BUCKET: stub
-      ENABLE_IMAGE_TRANSFORMATION: "true"
-      IMGPROXY_URL: http://imgproxy:5001
-    volumes:
-      - storage_data:/var/lib/storage
-
-  imgproxy:
-    image: darthsim/imgproxy:v3.8.0
-    container_name: divulgalinks-imgproxy
-    restart: unless-stopped
-    profiles: [supabase]
-    healthcheck:
-      test: ["CMD", "imgproxy", "health"]
-      timeout: 5s
-      interval: 5s
-      retries: 3
-    environment:
-      IMGPROXY_BIND: ":5001"
-      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
-      IMGPROXY_USE_ETAG: "true"
-      IMGPROXY_ENABLE_WEBP_DETECTION: "true"
-    volumes:
-      - storage_data:/var/lib/storage:ro
-
-  inbucket:
-    image: inbucket/inbucket:latest
-    container_name: divulgalinks-inbucket
-    restart: unless-stopped
-    profiles: [supabase]
-    ports:
-      - "${INBUCKET_PORT:-54324}:9000"
-    environment:
-      INBUCKET_STORAGE_MAILBOXMSGCAP: 50
 
 # ─────────────────────────────────────────────────────────────────────────
 # Volumes persistentes
@@ -368,5 +173,4 @@ services:
 volumes:
   db_data:
   redis_data:
-  storage_data:
   whatsapp_sessions:
