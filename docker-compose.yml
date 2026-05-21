@@ -122,7 +122,7 @@ services:
 
   # Postgres Meta — API REST para metadados do banco (usado pelo Studio)
   supabase-meta:
-    image: supabase/postgres-meta:v0.84.2
+    image: supabase/postgres-meta:latest
     container_name: divulgalinks-meta
     restart: unless-stopped
     depends_on:
@@ -138,7 +138,7 @@ services:
 
   # Supabase Studio — dashboard visual para o banco
   supabase-studio:
-    image: supabase/studio:20241014-afd3e48
+    image: supabase/studio:latest
     container_name: divulgalinks-studio
     restart: unless-stopped
     ports:
