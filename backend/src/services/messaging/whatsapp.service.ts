@@ -24,9 +24,14 @@ interface SessionEntry {
   sock: WASocket;
   status: WhatsAppStatus;
   qrCode: string | null;
+  initializedAt: number; // timestamp para detectar CONNECTING travado
 }
 
 const sessions = new Map<string, SessionEntry>();
+
+// Contador de reconexões por conta — zera quando conecta com sucesso
+const reconnectCounts = new Map<string, number>();
+const MAX_RECONNECTS = 3;
 const sessionsDir = path.join(process.cwd(), 'whatsapp_sessions');
 let ioServer: SocketIOServer | null = null;
 
@@ -62,12 +67,20 @@ const updateAccountStatus = async (
 
 export const initializeClient = async (accountId: string): Promise<void> => {
   const existing = sessions.get(accountId);
-  if (existing?.status === WhatsAppStatus.CONNECTED || existing?.status === WhatsAppStatus.CONNECTING) {
-    logger.info('WhatsApp: session already active', { accountId });
-    return;
-  }
 
   if (existing) {
+    // Permite re-inicializar se o CONNECTING estiver travado há mais de 90s
+    const staleConnecting =
+      existing.status === WhatsAppStatus.CONNECTING &&
+      Date.now() - existing.initializedAt > 90_000;
+
+    if (existing.status === WhatsAppStatus.CONNECTED || (existing.status === WhatsAppStatus.CONNECTING && !staleConnecting)) {
+      logger.info('WhatsApp: session already active', { accountId, status: existing.status });
+      return;
+    }
+
+    // Sessão travada ou em estado inválido — encerrar antes de reiniciar
+    logger.warn('WhatsApp: encerrando sessão travada antes de reiniciar', { accountId });
     try { existing.sock.end(undefined); } catch { /* ignore */ }
     sessions.delete(accountId);
   }
@@ -95,7 +108,7 @@ export const initializeClient = async (accountId: string): Promise<void> => {
     markOnlineOnConnect: false,
   });
 
-  const entry: SessionEntry = { sock, status: WhatsAppStatus.CONNECTING, qrCode: null };
+  const entry: SessionEntry = { sock, status: WhatsAppStatus.CONNECTING, qrCode: null, initializedAt: Date.now() };
   sessions.set(accountId, entry);
 
   // Save credentials on update
@@ -118,6 +131,7 @@ export const initializeClient = async (accountId: string): Promise<void> => {
       logger.info('WhatsApp: connection opened', { accountId });
       entry.status = WhatsAppStatus.CONNECTED;
       entry.qrCode = null;
+      reconnectCounts.delete(accountId); // reconectou com sucesso — zerar contador
 
       const phoneNumber = sock.user?.id?.split(':')[0] ?? '';
       await updateAccountStatus(accountId, WhatsAppStatus.CONNECTED, {
@@ -130,9 +144,9 @@ export const initializeClient = async (accountId: string): Promise<void> => {
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      const isLoggedOut = statusCode === DisconnectReason.loggedOut;
 
-      logger.warn('WhatsApp: connection closed', { accountId, statusCode, shouldReconnect });
+      logger.warn('WhatsApp: connection closed', { accountId, statusCode, isLoggedOut });
 
       entry.status = WhatsAppStatus.DISCONNECTED;
       sessions.delete(accountId);
@@ -141,14 +155,32 @@ export const initializeClient = async (accountId: string): Promise<void> => {
       emit('whatsapp:status', { accountId, status: WhatsAppStatus.DISCONNECTED });
       emit('whatsapp:disconnected', { accountId, statusCode });
 
-      // Auto-reconnect unless explicitly logged out
-      if (shouldReconnect) {
-        logger.info('WhatsApp: scheduling reconnect', { accountId, delayMs: 5000 });
-        setTimeout(() => initializeClient(accountId), 5000);
-      } else {
-        // Remove session files on logout
+      if (isLoggedOut) {
+        // Logout explícito — limpar arquivos e não reconectar
+        reconnectCounts.delete(accountId);
         try { fs.rmSync(sessionPath, { recursive: true, force: true }); } catch { /* ignore */ }
+        return;
       }
+
+      // Reconectar com limite de tentativas
+      const attempts = (reconnectCounts.get(accountId) ?? 0) + 1;
+      reconnectCounts.set(accountId, attempts);
+
+      if (attempts > MAX_RECONNECTS) {
+        // Sessão corrompida — limpar arquivos e parar de tentar
+        logger.warn('WhatsApp: máximo de reconexões atingido, limpando sessão corrompida', {
+          accountId,
+          attempts,
+        });
+        reconnectCounts.delete(accountId);
+        try { fs.rmSync(sessionPath, { recursive: true, force: true }); } catch { /* ignore */ }
+        // Status já está DISCONNECTED — usuário precisa escanear novo QR
+        return;
+      }
+
+      const delayMs = Math.min(5000 * attempts, 30_000); // backoff: 5s, 10s, 15s
+      logger.info('WhatsApp: reagendando reconexão', { accountId, attempts, delayMs });
+      setTimeout(() => initializeClient(accountId), delayMs);
     }
   });
 };
@@ -284,6 +316,7 @@ export const getChannels = async (
 };
 
 export const disconnectClient = async (accountId: string): Promise<void> => {
+  reconnectCounts.delete(accountId); // parar qualquer loop de reconexão
   const entry = sessions.get(accountId);
   if (!entry) {
     logger.warn('WhatsApp: no session to disconnect', { accountId });
