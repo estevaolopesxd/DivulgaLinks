@@ -45,7 +45,16 @@ export const Dashboard: React.FC = () => {
     retry: false,
   });
 
-  const s = stats ?? emptyStats;
+  const s: DashboardStats = {
+    totalProducts:       stats?.totalProducts       ?? 0,
+    activeCampaigns:     stats?.activeCampaigns     ?? 0,
+    messagesToday:       stats?.messagesToday       ?? 0,
+    totalClicks:         stats?.totalClicks         ?? 0,
+    clicksTimeline:      stats?.clicksTimeline      ?? [],
+    topProducts:         stats?.topProducts         ?? [],
+    messageStats:        stats?.messageStats        ?? { sent: 0, failed: 0, pending: 0 },
+    campaignPerformance: stats?.campaignPerformance ?? [],
+  };
 
   if (isLoading) return <PageLoader />;
 
