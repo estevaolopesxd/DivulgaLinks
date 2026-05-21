@@ -27,16 +27,6 @@ function formatBRL(n: number) {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-const emptyStats: DashboardStats = {
-  totalProducts: 0,
-  activeCampaigns: 0,
-  messagesToday: 0,
-  totalClicks: 0,
-  clicksTimeline: [],
-  topProducts: [],
-  messageStats: { sent: 0, failed: 0, pending: 0 },
-  campaignPerformance: [],
-};
 
 export const Dashboard: React.FC = () => {
   const { data: stats, isLoading } = useQuery({
