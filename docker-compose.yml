@@ -125,7 +125,6 @@ services:
     image: supabase/postgres-meta:v0.84.2
     container_name: divulgalinks-meta
     restart: unless-stopped
-    profiles: [studio]
     depends_on:
       db:
         condition: service_healthy
@@ -142,7 +141,6 @@ services:
     image: supabase/studio:20241014-afd3e48
     container_name: divulgalinks-studio
     restart: unless-stopped
-    profiles: [studio]
     ports:
       - "${SUPABASE_STUDIO_PORT:-54323}:3000"
     depends_on:
