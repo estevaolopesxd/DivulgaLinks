@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
+import { getPublicUrl } from '../utils/publicUrl';
 import { PlatformType } from '@prisma/client';
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/error';
@@ -199,11 +200,12 @@ export const importCSV = async (
 
     const platformId = req.body.platformId as string | undefined;
 
-    const { products, errors } = await parseProductsCSV(req.file.buffer);
+    const { products, errors, detectedFormat } = await parseProductsCSV(req.file.buffer);
 
     if (products.length === 0) {
       res.status(400).json({
-        message: 'No valid products found in CSV',
+        message: `Nenhum produto válido encontrado no CSV (formato detectado: ${detectedFormat ?? 'desconhecido'}). Verifique se o arquivo tem as colunas: "Item Name" (título), "Affiliate URL" (link), "Item Price" (preço).`,
+        detectedFormat,
         errors,
       });
       return;
@@ -226,9 +228,10 @@ export const importCSV = async (
     });
 
     res.status(201).json({
-      message: `Imported ${created.count} products`,
+      message: `${created.count} produto(s) importado(s) com sucesso (formato: ${detectedFormat})`,
       imported: created.count,
       skipped: products.length - created.count,
+      detectedFormat,
       errors,
     });
   } catch (error) {
@@ -347,8 +350,7 @@ export const generateTrackingUrl = async (
     // Generate a short code for tracking
     // URL points to /api/r/:shortCode which is proxied by nginx to the backend
     const shortCode = uuidv4().replace(/-/g, '').substring(0, 8);
-    const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const trackingUrl = `${baseUrl}/api/r/${shortCode}`;
+    const trackingUrl = `${getPublicUrl()}/api/r/${shortCode}`;
 
     await prisma.product.update({
       where: { id },

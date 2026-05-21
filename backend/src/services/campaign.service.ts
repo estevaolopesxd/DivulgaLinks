@@ -2,6 +2,7 @@ import { Queue, Job } from 'bullmq';
 import { CampaignStatus, DestinationType, MessageStatus, ProductRepeatMode } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../config/database';
+import { getPublicUrl } from '../utils/publicUrl';
 import { redis } from '../config/redis';
 import { logger } from '../utils/logger';
 import { parseTemplate } from '../utils/template';
@@ -86,8 +87,7 @@ const ensureTrackingUrl = async (product: { id: string; trackingUrl: string | nu
   }
 
   const shortCode = uuidv4().replace(/-/g, '').substring(0, 8);
-  const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-  const trackingUrl = `${baseUrl}/api/r/${shortCode}`;
+  const trackingUrl = `${getPublicUrl()}/api/r/${shortCode}`;
 
   await prisma.product.update({
     where: { id: product.id },
@@ -237,15 +237,13 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
     select: { content: true },
   });
 
-  // Built-in default templates used only when there are no global or campaign templates
+  // Built-in default templates — formato post WhatsApp com foto
   const BUILTIN_TEMPLATES = [
-    '🔥 *{{name}}*\n\n{{description}}\n\n{{priceBlock}}\n\n👉 {{url}}',
-    '✨ *{{name}}*\n\n{{description}}\n\n{{priceBlock}}\n\n🛒 {{url}}',
-    '💥 OFERTA! *{{name}}*\n\n{{description}}\n\n{{priceBlock}}\n\n🔗 {{url}}',
-    '⚡ *{{name}}*\n\n{{description}}\n\n{{priceBlock}}\n\n👆 Garanta já: {{url}}',
-    '🎯 *{{name}}*\n\n{{description}}\n\n{{priceBlock}}\n\n🛍️ {{url}}',
-    '💎 *{{name}}*\n\n{{description}}\n\n{{priceBlock}}\n\n📦 Aproveite: {{url}}',
-    '🚀 *{{name}}*\n\n{{description}}\n\n{{priceBlock}}\n\n🔥 Corra: {{url}}',
+    '🔥 *OFERTA DO DIA* 🔥\n\n🤩💥 *{{name}}*\n\n{{shortDescription}}\n\n{{priceBlockLines}}\n\n🛍️ Compre Aqui 👇\n{{url}}\n\n⏰ Promoção sujeita a alteração sem aviso prévio ou frete.',
+    '✨ *DESTAQUE DA SEMANA* ✨\n\n😍💫 *{{name}}*\n\n{{shortDescription}}\n\n{{priceBlockLines}}\n\n🛒 Garanta o seu agora 👇\n{{url}}\n\n⚠️ Preço sujeito a alteração. Confira condições no site.',
+    '💥 *SUPER PROMOÇÃO* 💥\n\n🎯🛍️ *{{name}}*\n\n{{shortDescription}}\n\n{{priceBlockLines}}\n\n👇 Link para comprar:\n{{url}}\n\n⏰ Válido por tempo limitado!',
+    '⚡ *OFERTA RELÂMPAGO* ⚡\n\n🚀💎 *{{name}}*\n\n{{shortDescription}}\n\n{{priceBlockLines}}\n\n🔗 Aproveite agora:\n{{url}}\n\n📦 Frete grátis sujeito a disponibilidade.',
+    '🎁 *PRESENTE PERFEITO* 🎁\n\n❤️✨ *{{name}}*\n\n{{shortDescription}}\n\n{{priceBlockLines}}\n\n🛍️ Compre Aqui 👇\n{{url}}\n\n⏰ Promoção sujeita a alteração sem aviso prévio.',
   ];
 
   // Template pool priority: global active > campaign's own template
@@ -377,6 +375,14 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
           status: MessageStatus.PENDING,
         },
       });
+
+      if (!productWithTracking.imageUrl) {
+        logger.warn('Campaign: produto sem imageUrl — mensagem será enviada sem foto', {
+          campaignId,
+          productId: product.id,
+          productTitle: product.title,
+        });
+      }
 
       logger.info('Campaign: dispatch product', {
         campaignId,

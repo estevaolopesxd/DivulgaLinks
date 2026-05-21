@@ -44,7 +44,7 @@ interface CampaignForm {
 
 const emptyCampaignForm: CampaignForm = {
   name: '', description: '', status: 'DRAFT',
-  messageTemplate: '🔥 *{{name}}*\n\n{{description}}\n\n{{priceBlock}}\n\n👉 {{url}}',
+  messageTemplate: '🔥 *OFERTA DO DIA* 🔥\n\n🤩💥 *{{name}}*\n\n{{shortDescription}}\n\n{{priceBlockLines}}\n\n🛍️ Compre Aqui 👇\n{{url}}\n\n⏰ Promoção sujeita a alteração sem aviso prévio ou frete.',
   intervalMinutes: '60', delayBetweenMessages: '2000',
   restrictTime: false, allowedStartTime: '08:00', allowedEndTime: '22:00',
   allowedWeekdays: [1, 2, 3, 4, 5],
@@ -501,7 +501,7 @@ export const Campaigns: React.FC = () => {
                 className="font-mono text-xs"
               />
               <div className="flex flex-wrap gap-1.5 mt-2">
-                {['{{name}}', '{{description}}', '{{price}}', '{{originalPrice}}', '{{priceBlock}}', '{{discount}}', '{{url}}'].map((v) => (
+                {['{{name}}', '{{description}}', '{{shortDescription}}', '{{price}}', '{{originalPrice}}', '{{priceBlock}}', '{{priceBlockLines}}', '{{discount}}', '{{url}}'].map((v) => (
                   <button key={v} type="button"
                     onClick={() => setForm(f => ({ ...f, messageTemplate: f.messageTemplate + v }))}
                     className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-mono hover:bg-blue-100 transition-colors">

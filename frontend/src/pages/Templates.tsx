@@ -14,12 +14,14 @@ import type { MessageTemplate } from '../types';
 
 const VARIABLES = [
   { tag: '{{name}}', label: 'Nome' },
-  { tag: '{{description}}', label: 'Descrição' },
-  { tag: '{{price}}', label: 'Preço' },
-  { tag: '{{originalPrice}}', label: 'Preço original' },
-  { tag: '{{priceBlock}}', label: 'Bloco de preço' },
-  { tag: '{{url}}', label: 'Link' },
-  { tag: '{{discount}}', label: 'Desconto' },
+  { tag: '{{description}}', label: 'Descrição completa' },
+  { tag: '{{shortDescription}}', label: 'Desc. curta (120 chars)' },
+  { tag: '{{price}}', label: 'Preço (R$)' },
+  { tag: '{{originalPrice}}', label: 'Preço original (R$)' },
+  { tag: '{{priceBlock}}', label: 'Preço (tachado)' },
+  { tag: '{{priceBlockLines}}', label: 'Preço (2 linhas)' },
+  { tag: '{{discount}}', label: 'Desconto %' },
+  { tag: '{{url}}', label: 'Link curto' },
 ];
 
 // ─── Form state ───────────────────────────────────────────────────────────────

@@ -46,23 +46,42 @@ export const parseTemplate = (template: string, product: Product): string => {
     ? product.originalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '';
 
-  // Smart price block: shows "De ~~original~~ por *price*" when original price exists,
-  // otherwise shows just "*price*" — avoids broken strikethrough with empty value
+  // Short description — first 120 chars (no mid-word cut), ideal for post size limits
+  const fullDesc = product.description ?? '';
+  const shortDescription = fullDesc.length > 120
+    ? fullDesc.substring(0, fullDesc.lastIndexOf(' ', 120) || 120) + '…'
+    : fullDesc;
+
+  // Smart price block — two styles:
+
+  // Style A: strikethrough (WhatsApp Markdown)
+  //   With original:  "De ~~R$ 79,98~~ por *R$ 43,99*"
+  //   Without:        "*R$ 43,99*"
   const priceBlock =
     product.originalPrice && product.originalPrice > product.price
       ? `De ~~${originalPrice}~~ por *${price}*`
       : `*${price}*`;
 
+  // Style B: two-line clean format (no strikethrough)
+  //   With original:  "de: R$ 79,98\n💰 Por: R$ 43,99"
+  //   Without:        "💰 Por: R$ 43,99"
+  const priceBlockLines =
+    product.originalPrice && product.originalPrice > product.price
+      ? `de: ${originalPrice}\n💰 Por: *${price}*`
+      : `💰 Por: *${price}*`;
+
   const replacements: Record<string, string> = {
     '{{name}}': product.title,
     '{{title}}': product.title,
     '{{description}}': product.description ?? '',
+    '{{shortDescription}}': shortDescription,
     '{{price}}': price,
     '{{priceRaw}}': priceRaw,
     '{{original_price}}': originalPrice,
     '{{originalPrice}}': originalPrice,
     '{{originalPriceRaw}}': originalPriceRaw,
     '{{priceBlock}}': priceBlock,
+    '{{priceBlockLines}}': priceBlockLines,
     '{{url}}': product.trackingUrl ?? product.affiliateUrl,
     '{{link}}': product.trackingUrl ?? product.affiliateUrl,
     '{{image}}': product.imageUrl ?? '',
