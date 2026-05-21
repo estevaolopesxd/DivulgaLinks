@@ -114,53 +114,20 @@ services:
     depends_on:
       - backend
 
-  # ╔═══════════════════════════════════════════════════════════════════╗
-  # ║  PROFILE: studio                                                 ║
-  # ║  docker-compose --profile studio up -d                           ║
-  # ║  Interface visual do banco em http://localhost:54323             ║
-  # ╚═══════════════════════════════════════════════════════════════════╝
-
-  # Postgres Meta — API REST para metadados do banco (usado pelo Studio)
-  supabase-meta:
-    image: supabase/postgres-meta:latest
-    container_name: divulgalinks-meta
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      PG_META_PORT: 8080
-      PG_META_DB_HOST: db
-      PG_META_DB_PORT: 5432
-      PG_META_DB_NAME: ${POSTGRES_DB:-divulgalinks}
-      PG_META_DB_USER: ${POSTGRES_USER:-postgres}
-      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
-
-  # Supabase Studio — dashboard visual para o banco
-  supabase-studio:
-    image: supabase/studio:latest
-    container_name: divulgalinks-studio
+  # ─────────────────────────────────────────────────────────────────────
+  # Adminer — UI web para o banco (http://IP:8888)
+  # ─────────────────────────────────────────────────────────────────────
+  adminer:
+    image: adminer:latest
+    container_name: divulgalinks-adminer
     restart: unless-stopped
     ports:
-      - "${SUPABASE_STUDIO_PORT:-54323}:3000"
+      - "8888:8080"
     depends_on:
       db:
         condition: service_healthy
-      supabase-meta:
-        condition: service_started
     environment:
-      STUDIO_PG_META_URL: http://supabase-meta:8080
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
-      DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION:-DivulgaLinks}
-      DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT:-divulgalinks}
-      # Sem Supabase API — só acesso ao banco via postgres-meta
-      SUPABASE_URL: http://localhost:8000
-      SUPABASE_PUBLIC_URL: http://localhost:8000
-      SUPABASE_ANON_KEY: ${ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.dc_X5iR_VP_qroESHHSJJIKCpYqYJByHViw4ih7d_v4}
-      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UtZGVtbyIsImlhdCI6MTY0MTc2OTIwMCwiZXhwIjoxNzk5NTM1NjAwfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q}
-      AUTH_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
-      NEXT_PUBLIC_ENABLE_LOGS: "false"
-      NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
+      ADMINER_DEFAULT_SERVER: db
 
 # ─────────────────────────────────────────────────────────────────────────
 # Volumes persistentes
