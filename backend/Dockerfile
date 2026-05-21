@@ -1,7 +1,9 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
-# Baileys needs these for native modules (sharp, etc.)
-RUN apk add --no-cache python3 make g++ vips-dev openssl
+# Dependências para módulos nativos (Baileys/sharp/canvas)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ libvips-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -16,13 +18,16 @@ COPY src ./src/
 RUN npm run build
 
 # ---- Production image ----
-FROM node:20-alpine AS production
+FROM node:20-slim AS production
 
-RUN apk add --no-cache vips wget openssl
+# openssl: requerido pelo Prisma; wget: healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl wget libvips \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN groupadd -g 1001 nodejs && useradd -u 1001 -g nodejs nodejs
 
 WORKDIR /app
 
