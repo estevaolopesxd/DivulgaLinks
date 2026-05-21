@@ -75,6 +75,8 @@ export interface Campaign {
   allowedStartTime?: string;   // "HH:mm"
   allowedEndTime?: string;     // "HH:mm"
   allowedWeekdays?: number[];  // 0=Dom … 6=Sáb
+  // Política de repetição de produto
+  productRepeatMode?: 'ALWAYS' | 'ONCE_PER_DAY' | 'NEVER';
 }
 
 export interface CampaignDestination {
@@ -84,6 +86,7 @@ export interface CampaignDestination {
   destinationId: string;
   destinationName: string;
   accountId: string;
+  accountType: string;
   isActive: boolean;
 }
 

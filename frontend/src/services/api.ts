@@ -219,16 +219,21 @@ export const campaignsApi = {
     return res.data.campaigns ?? [];
   },
   get: async (id: string) => {
-    const res = await api.get<Campaign>(`/api/campaigns/${id}`);
-    return res.data;
+    // The backend embeds products as CampaignProduct rows with a nested `product` object.
+    // We flatten them to match the Campaign.products: Product[] shape the UI expects.
+    type RawProduct = { id: string; campaignId: string; productId: string; product: Product };
+    type RawCampaign = Omit<Campaign, 'products'> & { products: RawProduct[] };
+    const res = await api.get<{ campaign: RawCampaign }>(`/api/campaigns/${id}`);
+    const c = res.data.campaign;
+    return { ...c, products: (c.products ?? []).map((cp) => cp.product) } as Campaign;
   },
   create: async (data: Omit<Campaign, 'id' | 'createdAt' | 'destinations' | 'products'>) => {
-    const res = await api.post<Campaign>('/api/campaigns', data);
-    return res.data;
+    const res = await api.post<{ campaign: Campaign }>('/api/campaigns', data);
+    return res.data.campaign;
   },
   update: async (id: string, data: Partial<Campaign>) => {
-    const res = await api.put<Campaign>(`/api/campaigns/${id}`, data);
-    return res.data;
+    const res = await api.put<{ campaign: Campaign }>(`/api/campaigns/${id}`, data);
+    return res.data.campaign;
   },
   delete: async (id: string) => {
     await api.delete(`/api/campaigns/${id}`);

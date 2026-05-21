@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { CampaignStatus, DestinationType } from '@prisma/client';
+import { CampaignStatus, DestinationType, ProductRepeatMode } from '@prisma/client';
 import { prisma } from '../config/database';
 import { AppError } from '../middleware/error';
 import { logger } from '../utils/logger';
@@ -28,6 +28,8 @@ const baseCampaignSchema = z.object({
     .array(z.number().int().min(0).max(6))
     .optional()
     .default([]),
+  // Política de repetição de produto
+  productRepeatMode: z.nativeEnum(ProductRepeatMode).optional().default(ProductRepeatMode.ALWAYS),
 });
 
 const campaignSchema = baseCampaignSchema.refine(
@@ -151,6 +153,10 @@ export const createCampaign = async (
         endTime: data.endTime ? new Date(data.endTime) : undefined,
         platforms: data.platforms,
         status: CampaignStatus.DRAFT,
+        allowedStartTime: data.allowedStartTime ?? null,
+        allowedEndTime: data.allowedEndTime ?? null,
+        allowedWeekdays: data.allowedWeekdays,
+        productRepeatMode: data.productRepeatMode,
       },
     });
 
@@ -189,6 +195,12 @@ export const updateCampaign = async (
         ...(data.startTime !== undefined && { startTime: new Date(data.startTime!) }),
         ...(data.endTime !== undefined && { endTime: new Date(data.endTime!) }),
         ...(data.platforms !== undefined && { platforms: data.platforms }),
+        // Time window
+        ...(data.allowedStartTime !== undefined && { allowedStartTime: data.allowedStartTime ?? null }),
+        ...(data.allowedEndTime !== undefined && { allowedEndTime: data.allowedEndTime ?? null }),
+        ...(data.allowedWeekdays !== undefined && { allowedWeekdays: data.allowedWeekdays }),
+        // Product repeat mode
+        ...(data.productRepeatMode !== undefined && { productRepeatMode: data.productRepeatMode }),
       },
     });
 
@@ -277,10 +289,16 @@ export const addDestination = async (
       destinationId: z.string().min(1),
       destinationName: z.string().min(1),
       accountId: z.string().min(1),
-      accountType: z.string().min(1),
+      // accountType is optional — derived from type if absent
+      accountType: z.string().optional(),
     });
 
     const data = schema.parse(req.body);
+
+    // Derive accountType from the destination type when not explicitly provided
+    const accountType =
+      data.accountType ??
+      (data.type.startsWith('WHATSAPP') ? 'WHATSAPP' : 'TELEGRAM');
 
     const campaign = await prisma.campaign.findUnique({ where: { id } });
     if (!campaign) throw new AppError('Campaign not found', 404);
@@ -288,7 +306,11 @@ export const addDestination = async (
     const destination = await prisma.campaignDestination.create({
       data: {
         campaignId: id,
-        ...data,
+        type: data.type,
+        destinationId: data.destinationId,
+        destinationName: data.destinationName,
+        accountId: data.accountId,
+        accountType,
         isActive: true,
       },
     });

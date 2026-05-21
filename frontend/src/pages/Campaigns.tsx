@@ -39,6 +39,7 @@ interface CampaignForm {
   allowedStartTime: string;
   allowedEndTime: string;
   allowedWeekdays: number[];
+  productRepeatMode: 'ALWAYS' | 'ONCE_PER_DAY' | 'NEVER';
 }
 
 const emptyCampaignForm: CampaignForm = {
@@ -47,6 +48,7 @@ const emptyCampaignForm: CampaignForm = {
   intervalMinutes: '60', delayBetweenMessages: '2000',
   restrictTime: false, allowedStartTime: '08:00', allowedEndTime: '22:00',
   allowedWeekdays: [1, 2, 3, 4, 5],
+  productRepeatMode: 'ALWAYS',
 };
 
 /** Resumo legível do horário configurado */
@@ -139,6 +141,15 @@ export const Campaigns: React.FC = () => {
     retry: false,
   });
 
+  // Full campaign detail (with destinations + products) — used in the modal tabs
+  const { data: campaignDetail } = useQuery({
+    queryKey: ['campaign', workingCampaign?.id],
+    queryFn: () => campaignsApi.get(workingCampaign!.id),
+    enabled: !!workingCampaign?.id,
+    staleTime: 0,
+    retry: false,
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: Omit<Campaign, 'id' | 'createdAt' | 'destinations' | 'products'>) => campaignsApi.create(data),
     onSuccess: (created) => {
@@ -179,6 +190,7 @@ export const Campaigns: React.FC = () => {
       campaignsApi.addDestination(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign', workingCampaign?.id] });
       toast.success('Destino adicionado!');
       setAddDestOpen(false);
       setDestType(''); setDestAccount(''); setDestId(''); setDestName(''); setDestSearch('');
@@ -188,18 +200,30 @@ export const Campaigns: React.FC = () => {
 
   const removeDestMutation = useMutation({
     mutationFn: ({ cid, did }: { cid: string; did: string }) => campaignsApi.removeDestination(cid, did),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Destino removido.'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign', workingCampaign?.id] });
+      toast.success('Destino removido.');
+    },
   });
 
   const addProductMutation = useMutation({
     mutationFn: ({ cid, pid }: { cid: string; pid: string }) => campaignsApi.addProduct(cid, pid),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Produto adicionado!'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign', workingCampaign?.id] });
+      toast.success('Produto adicionado!');
+    },
     onError: () => toast.error('Erro ao adicionar produto.'),
   });
 
   const removeProductMutation = useMutation({
     mutationFn: ({ cid, pid }: { cid: string; pid: string }) => campaignsApi.removeProduct(cid, pid),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Produto removido.'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign', workingCampaign?.id] });
+      toast.success('Produto removido.');
+    },
   });
 
   const openCreate = () => {
@@ -221,6 +245,7 @@ export const Campaigns: React.FC = () => {
       allowedStartTime: c.allowedStartTime ?? '08:00',
       allowedEndTime: c.allowedEndTime ?? '22:00',
       allowedWeekdays: c.allowedWeekdays ?? [1, 2, 3, 4, 5],
+      productRepeatMode: c.productRepeatMode ?? 'ALWAYS',
     });
     setActiveTab('settings');
     setAddModalOpen(true);
@@ -240,6 +265,7 @@ export const Campaigns: React.FC = () => {
       allowedStartTime: form.restrictTime ? form.allowedStartTime : undefined,
       allowedEndTime: form.restrictTime ? form.allowedEndTime : undefined,
       allowedWeekdays: form.restrictTime ? form.allowedWeekdays : [],
+      productRepeatMode: form.productRepeatMode,
     };
     if (workingCampaign) {
       updateMutation.mutate({ id: workingCampaign.id, data: payload });
@@ -251,15 +277,22 @@ export const Campaigns: React.FC = () => {
 
   const handleAddDest = () => {
     if (!workingCampaign || !destType || !destAccount || !destId) return;
+    const accountType = destType.startsWith('WHATSAPP') ? 'WHATSAPP' : 'TELEGRAM';
     addDestMutation.mutate({
       id: workingCampaign.id,
-      data: { type: destType as CampaignDestination['type'], destinationId: destId, destinationName: destName, accountId: destAccount, isActive: true },
+      data: {
+        type: destType as CampaignDestination['type'],
+        destinationId: destId,
+        destinationName: destName,
+        accountId: destAccount,
+        accountType,
+        isActive: true,
+      },
     });
   };
 
-  const currentCampaignData = workingCampaign
-    ? (campaigns as Campaign[]).find((c) => c.id === workingCampaign.id) ?? workingCampaign
-    : null;
+  // Prefer full detail (with destinations/products) over the list item
+  const currentCampaignData = campaignDetail ?? workingCampaign;
 
   // Normalise the group/channel/chat list shown in the add-destination modal
   const rawDestList: { id: string; name: string; participantCount?: number }[] =
@@ -405,6 +438,42 @@ export const Campaigns: React.FC = () => {
                 onChange={(e) => setForm(f => ({ ...f, delayBetweenMessages: e.target.value }))}
                 hint="Tempo entre cada mensagem" />
             </div>
+            {/* Product repeat mode */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Repetição de produto por destino
+              </label>
+              <div className="space-y-2">
+                {([
+                  { value: 'ALWAYS',       label: 'Sempre repetir',    desc: 'Envia todos os produtos a cada ciclo, sem restrição de histórico' },
+                  { value: 'ONCE_PER_DAY', label: 'Uma vez por dia',   desc: 'Cada produto é enviado no máximo 1× por dia por grupo/canal' },
+                  { value: 'NEVER',        label: 'Nunca repetir',     desc: 'Uma vez enviado a um destino, o produto nunca mais aparece nele' },
+                ] as { value: CampaignForm['productRepeatMode']; label: string; desc: string }[]).map(({ value, label, desc }) => (
+                  <label
+                    key={value}
+                    className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                      form.productRepeatMode === value
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="productRepeatMode"
+                      value={value}
+                      checked={form.productRepeatMode === value}
+                      onChange={() => setForm((f) => ({ ...f, productRepeatMode: value }))}
+                      className="mt-0.5 accent-primary-500"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div>
               <TextArea
                 label="Template da Mensagem"

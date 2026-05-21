@@ -1,5 +1,5 @@
 import { Queue, Job } from 'bullmq';
-import { CampaignStatus, DestinationType, MessageStatus } from '@prisma/client';
+import { CampaignStatus, DestinationType, MessageStatus, ProductRepeatMode } from '@prisma/client';
 import { prisma } from '../config/database';
 import { redis } from '../config/redis';
 import { logger } from '../utils/logger';
@@ -278,6 +278,36 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
         // 4. Use custom template if set
         if (config.customTemplate) {
           effectiveTemplate = config.customTemplate;
+        }
+      }
+
+      // ── Product repeat mode check ─────────────────────────────────────────
+      if (campaign.productRepeatMode !== ProductRepeatMode.ALWAYS) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const alreadySent = await prisma.messageLog.count({
+          where: {
+            campaignId,
+            productId: product.id,
+            destinationId: destination.destinationId,
+            status: MessageStatus.SENT,
+            ...(campaign.productRepeatMode === ProductRepeatMode.ONCE_PER_DAY && {
+              sentAt: { gte: today, lt: tomorrow },
+            }),
+          },
+        });
+
+        if (alreadySent > 0) {
+          logger.info('Campaign: skipping product — repeat policy', {
+            campaignId,
+            productId: product.id,
+            destinationId: destination.destinationId,
+            mode: campaign.productRepeatMode,
+          });
+          continue;
         }
       }
 

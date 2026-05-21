@@ -58,6 +58,12 @@ enum MessageStatus {
   CLICKED
 }
 
+enum ProductRepeatMode {
+  ALWAYS        // Send all products on every cycle regardless of history
+  ONCE_PER_DAY  // Each product sent at most once per day per destination
+  NEVER         // Each product sent only once ever per destination
+}
+
 model User {
   id          String    @id @default(uuid())
   email       String    @unique
@@ -160,6 +166,9 @@ model Campaign {
   allowedStartTime      String?        // "HH:mm" – início da janela de envio
   allowedEndTime        String?        // "HH:mm" – fim da janela de envio
   allowedWeekdays       Int[]          // 0=Dom … 6=Sáb; vazio = todos os dias
+
+  // ── Política de repetição de produto ──────────────────────────────────────
+  productRepeatMode     ProductRepeatMode @default(ALWAYS)
 
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
