@@ -118,7 +118,7 @@ export const Telegram: React.FC = () => {
               {/* Token preview */}
               <div className="bg-gray-50 rounded-lg px-3 py-2">
                 <p className="text-xs text-gray-400">Token</p>
-                <p className="text-sm font-mono text-gray-600 mt-0.5">{bot.token.slice(0, 10)}{'*'.repeat(15)}</p>
+                <p className="text-sm font-mono text-gray-600 mt-0.5">{(bot.token ?? '').slice(0, 10)}{'*'.repeat(15)}</p>
               </div>
 
               {/* Actions */}

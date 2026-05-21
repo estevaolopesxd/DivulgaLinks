@@ -560,20 +560,20 @@ const Metrics: React.FC = () => {
                   {topData.map((item, idx) => {
                     const ctr = item.sent > 0 ? (item.clicks / item.sent) * 100 : 0;
                     return (
-                      <tr key={item.product.id} className="hover:bg-gray-50">
+                      <tr key={item.product?.id ?? idx} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-400 font-mono text-xs">{String(idx + 1).padStart(2, '0')}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            {item.product.imageUrl ? (
+                            {item.product?.imageUrl ? (
                               <img
                                 src={item.product.imageUrl}
-                                alt={item.product.title}
+                                alt={item.product?.title}
                                 className="w-9 h-9 rounded-lg object-cover flex-shrink-0 bg-gray-100"
                               />
                             ) : (
                               <div className="w-9 h-9 rounded-lg bg-gray-100 flex-shrink-0" />
                             )}
-                            <span className="font-medium text-gray-900 line-clamp-1">{item.product.title}</span>
+                            <span className="font-medium text-gray-900 line-clamp-1">{item.product?.title}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right text-gray-700">{fmtNum(item.sent)}</td>

@@ -93,11 +93,11 @@ function configToForm(c: DestinationConfig): ConfigForm {
     restrictTime: Boolean(c.allowedStartTime),
     allowedStartTime: c.allowedStartTime ?? '08:00',
     allowedEndTime: c.allowedEndTime ?? '22:00',
-    allowedWeekdays: c.allowedWeekdays.length > 0 ? c.allowedWeekdays : [0, 1, 2, 3, 4, 5, 6],
+    allowedWeekdays: (c.allowedWeekdays ?? []).length > 0 ? (c.allowedWeekdays ?? []) : [0, 1, 2, 3, 4, 5, 6],
     maxMessagesPerDay: c.maxMessagesPerDay != null ? String(c.maxMessagesPerDay) : '',
     minIntervalMinutes: c.minIntervalMinutes != null ? String(c.minIntervalMinutes) : '',
-    filterPlatforms: c.allowedPlatformIds.length > 0,
-    allowedPlatformIds: c.allowedPlatformIds,
+    filterPlatforms: (c.allowedPlatformIds ?? []).length > 0,
+    allowedPlatformIds: c.allowedPlatformIds ?? [],
     useCustomTemplate: Boolean(c.customTemplate),
     customTemplate: c.customTemplate ?? '',
   };
@@ -340,9 +340,9 @@ const GroupConfig: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((cfg) => {
             const wa = isWhatsApp(cfg.destinationType);
-            const daysLabel = cfg.allowedWeekdays.length === 7
+            const daysLabel = (cfg.allowedWeekdays ?? []).length === 7
               ? 'Todos os dias'
-              : cfg.allowedWeekdays.map((d) => WEEKDAYS[d]).join(', ');
+              : (cfg.allowedWeekdays ?? []).map((d) => WEEKDAYS[d]).join(', ');
 
             return (
               <Card key={cfg.id} className="flex flex-col gap-3">
@@ -381,7 +381,7 @@ const GroupConfig: React.FC = () => {
                   <Chip
                     icon={<Calendar size={12} />}
                     text={daysLabel}
-                    muted={cfg.allowedWeekdays.length === 7}
+                    muted={(cfg.allowedWeekdays ?? []).length === 7}
                   />
                   <Chip
                     icon={<Zap size={12} />}
@@ -395,8 +395,8 @@ const GroupConfig: React.FC = () => {
                   />
                   <Chip
                     icon={<FilterIcon size={12} />}
-                    text={cfg.allowedPlatformIds.length > 0 ? `${cfg.allowedPlatformIds.length} plataforma${cfg.allowedPlatformIds.length > 1 ? 's' : ''}` : 'Todas plataformas'}
-                    muted={cfg.allowedPlatformIds.length === 0}
+                    text={(cfg.allowedPlatformIds ?? []).length > 0 ? `${(cfg.allowedPlatformIds ?? []).length} plataforma${(cfg.allowedPlatformIds ?? []).length > 1 ? 's' : ''}` : 'Todas plataformas'}
+                    muted={(cfg.allowedPlatformIds ?? []).length === 0}
                   />
                 </div>
 

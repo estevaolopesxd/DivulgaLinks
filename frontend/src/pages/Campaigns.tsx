@@ -572,7 +572,7 @@ export const Campaigns: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{p.title}</p>
-                      <p className="text-xs text-gray-500">R$ {p.price.toFixed(2)}</p>
+                      <p className="text-xs text-gray-500">R$ {(p.price ?? 0).toFixed(2)}</p>
                     </div>
                     <button onClick={() => removeProductMutation.mutate({ cid: currentCampaignData.id, pid: p.id })}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
@@ -640,7 +640,7 @@ export const Campaigns: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800 truncate">{p.title}</p>
-                  <p className="text-xs text-gray-500">R$ {p.price.toFixed(2)}</p>
+                  <p className="text-xs text-gray-500">R$ {(p.price ?? 0).toFixed(2)}</p>
                 </div>
                 <Button size="xs" variant="outline"
                   onClick={() => { if (currentCampaignData) addProductMutation.mutate({ cid: currentCampaignData.id, pid: p.id }); }}>

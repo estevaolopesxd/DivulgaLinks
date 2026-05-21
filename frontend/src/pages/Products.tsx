@@ -125,7 +125,7 @@ export const Products: React.FC = () => {
       title: p.title, description: p.description ?? '', price: String(p.price),
       originalPrice: String(p.originalPrice ?? ''), imageUrl: p.imageUrl ?? '',
       affiliateUrl: p.affiliateUrl, category: p.category ?? '',
-      tags: p.tags.join(', '), isActive: p.isActive, platformId: p.platformId ?? '',
+      tags: (p.tags ?? []).join(', '), isActive: p.isActive, platformId: p.platformId ?? '',
     });
   };
 
