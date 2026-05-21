@@ -1,18 +1,15 @@
 #!/bin/sh
 
-echo "==> Executando migrations do Prisma..."
-if node_modules/.bin/prisma migrate deploy; then
-  echo "==> Migrations aplicadas com sucesso."
+echo "==> Criando/atualizando tabelas no banco..."
+if node_modules/.bin/prisma db push --accept-data-loss; then
+  echo "==> Schema aplicado com sucesso."
 else
-  echo "AVISO: prisma migrate deploy falhou (schema pode ja estar atualizado). Continuando..."
+  echo "ERRO: prisma db push falhou. Abortando."
+  exit 1
 fi
 
 echo "==> Criando usuario admin (se nao existir)..."
-if node prisma/seed.js; then
-  echo "==> Seed concluido."
-else
-  echo "AVISO: Seed falhou. Continuando..."
-fi
+node prisma/seed.js || echo "AVISO: Seed falhou, continuando..."
 
 echo "==> Iniciando servidor..."
 exec node dist/index.js

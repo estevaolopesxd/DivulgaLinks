@@ -123,7 +123,7 @@ services:
     container_name: divulgalinks-pgadmin
     restart: unless-stopped
     ports:
-      - "54323:80"
+      - "5050:80"
     depends_on:
       db:
         condition: service_healthy
