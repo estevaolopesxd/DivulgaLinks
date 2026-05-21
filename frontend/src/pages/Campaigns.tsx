@@ -34,7 +34,6 @@ interface CampaignForm {
   status: Campaign['status'];
   messageTemplate: string;
   intervalMinutes: string;
-  delayBetweenMessages: string;
   restrictTime: boolean;
   allowedStartTime: string;
   allowedEndTime: string;
@@ -45,7 +44,7 @@ interface CampaignForm {
 const emptyCampaignForm: CampaignForm = {
   name: '', description: '', status: 'DRAFT',
   messageTemplate: '🔥 *OFERTA DO DIA* 🔥\n\n🤩💥 *{{name}}*\n\n{{shortDescription}}\n\n{{priceBlockLines}}\n\n🛍️ Compre Aqui 👇\n{{url}}\n\n⏰ Promoção sujeita a alteração sem aviso prévio ou frete.',
-  intervalMinutes: '60', delayBetweenMessages: '2000',
+  intervalMinutes: '60',
   restrictTime: false, allowedStartTime: '08:00', allowedEndTime: '22:00',
   allowedWeekdays: [1, 2, 3, 4, 5],
   productRepeatMode: 'ALWAYS',
@@ -262,7 +261,6 @@ export const Campaigns: React.FC = () => {
     setForm({
       name: c.name, description: c.description ?? '', status: c.status,
       messageTemplate: c.messageTemplate, intervalMinutes: String(c.intervalMinutes),
-      delayBetweenMessages: String(c.delayBetweenMessages),
       restrictTime: !!(c.allowedStartTime && c.allowedEndTime),
       allowedStartTime: c.allowedStartTime ?? '08:00',
       allowedEndTime: c.allowedEndTime ?? '22:00',
@@ -281,7 +279,7 @@ export const Campaigns: React.FC = () => {
       status: form.status,
       messageTemplate: form.messageTemplate,
       intervalMinutes: parseInt(form.intervalMinutes) || 60,
-      delayBetweenMessages: parseInt(form.delayBetweenMessages) || 0,
+      delayBetweenMessages: 0, // controlado pelo próprio intervalMinutes no backend
       isActive: form.status === 'ACTIVE',
       platforms: [],
       allowedStartTime: form.restrictTime ? form.allowedStartTime : undefined,
@@ -384,7 +382,7 @@ export const Campaigns: React.FC = () => {
                   </div>
                   {c.description && <p className="text-sm text-gray-500 mt-0.5 truncate">{c.description}</p>}
                   <div className="flex items-center gap-4 mt-2 text-xs text-gray-400 flex-wrap">
-                    <span className="flex items-center gap-1"><Clock size={11} />{c.intervalMinutes} min de intervalo</span>
+                    <span className="flex items-center gap-1"><Clock size={11} />{c.intervalMinutes} min entre msgs</span>
                     <span className="flex items-center gap-1"><Users size={11} />{c.destinations?.length ?? 0} destino{(c.destinations?.length ?? 0) !== 1 ? 's' : ''}</span>
                     <span className="flex items-center gap-1"><Package size={11} />{c.products?.length ?? 0} produto{(c.products?.length ?? 0) !== 1 ? 's' : ''}</span>
                     {c.allowedStartTime && c.allowedEndTime && (
@@ -448,14 +446,9 @@ export const Campaigns: React.FC = () => {
             <Input label="Nome da Campanha" required value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} />
             <TextArea label="Descrição" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} />
             <Select label="Status" options={statusOptions} value={form.status} onChange={(e) => setForm(f => ({ ...f, status: e.target.value as Campaign['status'] }))} />
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Intervalo entre ciclos (min)" type="number" required value={form.intervalMinutes}
-                onChange={(e) => setForm(f => ({ ...f, intervalMinutes: e.target.value }))}
-                hint="A cada quantos minutos a campanha dispara um novo ciclo completo" />
-              <Input label="Pausa entre mensagens (ms)" type="number" value={form.delayBetweenMessages}
-                onChange={(e) => setForm(f => ({ ...f, delayBetweenMessages: e.target.value }))}
-                hint="Espera (em ms) entre cada mensagem dentro do ciclo. 0 = sem pausa" />
-            </div>
+            <Input label="Intervalo entre mensagens (minutos)" type="number" required value={form.intervalMinutes}
+              onChange={(e) => setForm(f => ({ ...f, intervalMinutes: e.target.value }))}
+              hint="Tempo de espera em minutos entre cada mensagem enviada. Ex: 60 = uma mensagem por hora." />
             {/* Product repeat mode */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

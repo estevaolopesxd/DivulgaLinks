@@ -250,10 +250,45 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
   const pickTemplate = (): string =>
     templatePool[Math.floor(Math.random() * templatePool.length)];
 
-  const delay = campaign.delayBetweenMessages;
+  // ── Intervalo entre mensagens ─────────────────────────────────────────────
+  // Usa o próprio intervalMinutes (em ms) como pausa entre cada mensagem.
+  // Assim o usuário configura UM valor e ele vale tanto para o espaçamento
+  // entre mensagens quanto para a frequência do ciclo completo.
+  const delayBetweenMessages = campaign.intervalMinutes * 60 * 1000;
 
   for (const campaignProduct of campaign.products) {
     const product = campaignProduct.product;
+
+    // ── Re-check de estado a cada produto ────────────────────────────────────
+    // O job pode durar horas; verificamos se a campanha ainda está ativa e
+    // se ainda estamos dentro da janela de horário antes de cada produto.
+    const freshState = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { isActive: true, allowedStartTime: true, allowedEndTime: true, allowedWeekdays: true },
+    });
+
+    if (!freshState?.isActive) {
+      logger.info('Campaign: loop interrompido — campanha desativada durante dispatch', { campaignId });
+      return;
+    }
+
+    if (freshState.allowedStartTime && freshState.allowedEndTime) {
+      const stillInWindow = isWithinTimeWindow(
+        freshState.allowedStartTime,
+        freshState.allowedEndTime,
+        freshState.allowedWeekdays,
+      );
+      if (!stillInWindow) {
+        logger.info('Campaign: janela de horário fechou durante dispatch, reagendando para abertura', { campaignId });
+        const nextOpen = getNextWindowOpenTime(freshState.allowedStartTime, freshState.allowedWeekdays);
+        const queue = getCampaignQueue();
+        await queue.add('dispatch', { campaignId }, {
+          delay: nextOpen.getTime() - Date.now(),
+          jobId: `campaign-${campaignId}-window-${Date.now()}`,
+        });
+        return;
+      }
+    }
 
     for (const destination of campaign.destinations) {
       // ── DestinationConfig checks ──────────────────────────────────────────
@@ -476,14 +511,21 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
         });
       }
 
-      // Delay between messages
-      if (delay > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
+      // ── Aguarda o intervalo configurado antes da próxima mensagem ──────────
+      // O delay é aplicado APÓS o envio, garantindo que cada mensagem seja
+      // espaçada por `intervalMinutes` minutos da seguinte.
+      if (delayBetweenMessages > 0) {
+        logger.info('Campaign: aguardando intervalo antes da próxima mensagem', {
+          campaignId,
+          delayMinutes: campaign.intervalMinutes,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delayBetweenMessages));
       }
     }
   }
 
-  // Schedule next run a partir do INÍCIO deste ciclo (não do fim)
+  // Após o último delay do ciclo, o próximo ciclo começa em ~10s
+  // (scheduleNextRun detecta que idealNextRun já passou e usa minNextRun = now+10s)
   await scheduleNextRun(campaignId, dispatchStartedAt);
 };
 
