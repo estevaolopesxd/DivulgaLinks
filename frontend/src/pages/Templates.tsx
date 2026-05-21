@@ -21,7 +21,7 @@ const VARIABLES = [
   { tag: '{{priceBlock}}', label: 'Preço (tachado)' },
   { tag: '{{priceBlockLines}}', label: 'Preço (2 linhas)' },
   { tag: '{{discount}}', label: 'Desconto %' },
-  { tag: '{{url}}', label: 'Link curto' },
+  { tag: '{{url}}', label: 'Link do produto' },
 ];
 
 // ─── Form state ───────────────────────────────────────────────────────────────

@@ -22,8 +22,9 @@ export const formatBRL = (value: number): string => {
  *  {{originalPriceRaw}} - original price numbers only     (ex: 79,90) — empty if not set
  *  {{original_price}}   - alias for {{originalPrice}}
  *  {{priceBlock}}       - smart block: "De ~~R$ X~~ por *R$ Y*" or just "*R$ Y*" if no original
- *  {{url}}              - short tracking URL (falls back to affiliateUrl)
+ *  {{url}}              - affiliate URL cadastrado pelo usuário (campo affiliateUrl)
  *  {{link}}             - alias for {{url}}
+ *  {{trackingUrl}}      - URL de rastreamento de cliques (se gerada); cai back para affiliateUrl
  *  {{image}}            - image URL
  *  {{category}}         - product category
  *  {{discount}}         - discount percentage (ex: 35%) — empty if no original price
@@ -82,8 +83,11 @@ export const parseTemplate = (template: string, product: Product): string => {
     '{{originalPriceRaw}}': originalPriceRaw,
     '{{priceBlock}}': priceBlock,
     '{{priceBlockLines}}': priceBlockLines,
-    '{{url}}': product.trackingUrl ?? product.affiliateUrl,
-    '{{link}}': product.trackingUrl ?? product.affiliateUrl,
+    // {{url}} e {{link}} usam SEMPRE o affiliateUrl cadastrado pelo usuário
+    '{{url}}': product.affiliateUrl,
+    '{{link}}': product.affiliateUrl,
+    // {{trackingUrl}} disponível opcionalmente para quem quiser rastrear cliques
+    '{{trackingUrl}}': product.trackingUrl ?? product.affiliateUrl,
     '{{image}}': product.imageUrl ?? '',
     '{{category}}': product.category ?? '',
     '{{discount}}': discount,

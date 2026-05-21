@@ -64,6 +64,12 @@ const processSingleDispatch = async (
     return;
   }
 
+  // Skip if campaign is no longer active
+  if (!campaign.isActive) {
+    logger.info('Worker: skipping single dispatch — campaign inactive', { campaignId });
+    return;
+  }
+
   const message = parseTemplate(campaign.messageTemplate, product);
 
   const logEntry = await prisma.messageLog.create({

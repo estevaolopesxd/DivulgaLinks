@@ -9,6 +9,7 @@ import { logger } from './utils/logger';
 import { setSocketIO, restoreSessions } from './services/whatsapp.service';
 import telegramService from './services/telegram.service';
 import { startWorker, stopWorker } from './workers/campaign.worker';
+import { getCampaignQueue } from './services/campaign.service';
 
 const bootstrap = async (): Promise<void> => {
   // 1. Connect to Redis
@@ -74,6 +75,33 @@ const bootstrap = async (): Promise<void> => {
   // 7. Start BullMQ campaign worker
   startWorker();
   logger.info('BullMQ campaign worker started');
+
+  // 7b. Limpar jobs órfãos no Redis para campanhas que estão inativas no DB.
+  //     Evita que jobs persistidos entre reinicializações do container disparem
+  //     mensagens de campanhas que o usuário já pausou/desativou.
+  try {
+    const queue = getCampaignQueue();
+    const pendingJobs = await queue.getJobs(['waiting', 'delayed']);
+    let cleaned = 0;
+    for (const job of pendingJobs) {
+      const cid = job.data?.campaignId;
+      if (!cid) continue;
+      const campaign = await prisma.campaign.findUnique({
+        where: { id: cid },
+        select: { isActive: true },
+      });
+      if (!campaign || !campaign.isActive) {
+        await job.remove();
+        cleaned++;
+        logger.info('Startup: removido job órfão de campanha inativa', { jobId: job.id, campaignId: cid });
+      }
+    }
+    if (cleaned > 0) {
+      logger.info(`Startup: ${cleaned} job(s) órfão(s) removido(s) da fila`);
+    }
+  } catch (err) {
+    logger.warn('Startup: erro ao limpar jobs órfãos', { error: err });
+  }
 
   // 8. Restore active WhatsApp sessions
   if (env.NODE_ENV === 'production') {

@@ -1,8 +1,6 @@
 import { Queue, Job } from 'bullmq';
 import { CampaignStatus, DestinationType, MessageStatus, ProductRepeatMode } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../config/database';
-import { getPublicUrl } from '../utils/publicUrl';
 import { redis } from '../config/redis';
 import { logger } from '../utils/logger';
 import { parseTemplate } from '../utils/template';
@@ -81,23 +79,6 @@ const getNextWindowOpenTime = (
  * Ensures a product has a tracking URL. Generates and persists one if missing.
  * Returns the (potentially updated) product object.
  */
-const ensureTrackingUrl = async (product: { id: string; trackingUrl: string | null; affiliateUrl: string }): Promise<string> => {
-  if (product.trackingUrl) {
-    return product.trackingUrl;
-  }
-
-  const shortCode = uuidv4().replace(/-/g, '').substring(0, 8);
-  const trackingUrl = `${getPublicUrl()}/api/r/${shortCode}`;
-
-  await prisma.product.update({
-    where: { id: product.id },
-    data: { trackingUrl },
-  });
-
-  logger.info('Campaign: generated tracking URL for product', { productId: product.id, trackingUrl });
-
-  return trackingUrl;
-};
 
 let campaignQueue: Queue | null = null;
 
@@ -359,10 +340,8 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
         }
       }
 
-      // Ensure product has a tracking URL (generates and persists if missing)
-      const trackingUrl = await ensureTrackingUrl(product);
-      const productWithTracking = { ...product, trackingUrl };
-      const message = parseTemplate(effectiveTemplate, productWithTracking);
+      // {{url}} uses affiliateUrl directly (as registered by the user)
+      const message = parseTemplate(effectiveTemplate, product);
 
       // Create a pending log entry
       const logEntry = await prisma.messageLog.create({
@@ -376,7 +355,7 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
         },
       });
 
-      if (!productWithTracking.imageUrl) {
+      if (!product.imageUrl) {
         logger.warn('Campaign: produto sem imageUrl — mensagem será enviada sem foto', {
           campaignId,
           productId: product.id,
@@ -388,8 +367,8 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
         campaignId,
         productId: product.id,
         productTitle: product.title,
-        hasImage: !!productWithTracking.imageUrl,
-        imageUrl: productWithTracking.imageUrl ?? null,
+        hasImage: !!product.imageUrl,
+        imageUrl: product.imageUrl ?? null,
         destinationId: destination.destinationId,
         destinationType: destination.type,
       });
@@ -408,14 +387,14 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
             destination.accountId,
             destination.destinationId,
             message,
-            productWithTracking.imageUrl ?? undefined,
+            product.imageUrl ?? undefined,
           );
         } else if (isTelegram) {
           await telegramService.sendMessage(
             destination.accountId,
             destination.destinationId,
             message,
-            productWithTracking.imageUrl ?? undefined,
+            product.imageUrl ?? undefined,
           );
         }
 
