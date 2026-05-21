@@ -18,6 +18,7 @@ import { logger } from '../../utils/logger';
 import path from 'path';
 import fs from 'fs';
 import P from 'pino';
+import axios from 'axios';
 
 interface SessionEntry {
   sock: WASocket;
@@ -171,22 +172,72 @@ export const sendMessage = async (
     throw new Error(`WhatsApp account ${accountId} is not connected`);
   }
 
-  try {
-    let content: AnyMessageContent;
+  logger.info('WhatsApp: sending message', {
+    accountId,
+    jid,
+    hasImage: !!imageUrl,
+    imageUrl: imageUrl ?? null,
+    textLength: text.length,
+  });
 
-    if (imageUrl) {
-      content = { image: { url: imageUrl }, caption: text };
-    } else {
-      content = { text };
+  // ── Strategy 1: image + caption via downloaded buffer ────────────────────
+  if (imageUrl) {
+    const absoluteUrl = imageUrl.startsWith('http')
+      ? imageUrl
+      : `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}${imageUrl}`;
+
+    // Strategy 1a: download buffer → send with caption
+    try {
+      const imgResponse = await axios.get(absoluteUrl, {
+        responseType: 'arraybuffer',
+        timeout: 20_000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+        },
+        maxRedirects: 10,
+      });
+
+      const imageBuffer = Buffer.from(imgResponse.data as ArrayBuffer);
+
+      if (imageBuffer.length < 500) {
+        throw new Error(`Buffer suspeito (${imageBuffer.length} bytes) — provavelmente página de erro`);
+      }
+
+      const lowerUrl = absoluteUrl.toLowerCase().split('?')[0];
+      const mimetype = lowerUrl.endsWith('.png')  ? 'image/png'
+                     : lowerUrl.endsWith('.gif')  ? 'image/gif'
+                     : lowerUrl.endsWith('.webp') ? 'image/webp'
+                     : 'image/jpeg';
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await entry.sock.sendMessage(jid, { image: imageBuffer, mimetype, caption: text } as any);
+      logger.info('WhatsApp: [1a] image+caption sent via buffer', { accountId, jid, bytes: imageBuffer.length });
+      return true;
+    } catch (err1a) {
+      logger.warn('WhatsApp: [1a] buffer strategy failed', {
+        error: err1a instanceof Error ? err1a.message : String(err1a),
+      });
     }
 
-    await entry.sock.sendMessage(jid, content);
-    logger.info('WhatsApp: message sent', { accountId, jid });
-    return true;
-  } catch (error) {
-    logger.error('WhatsApp: failed to send message', { accountId, jid, error });
-    throw error;
+    // Strategy 1b: send via URL directly (let Baileys handle the download)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await entry.sock.sendMessage(jid, { image: { url: absoluteUrl }, caption: text } as any);
+      logger.info('WhatsApp: [1b] image+caption sent via URL', { accountId, jid, url: absoluteUrl });
+      return true;
+    } catch (err1b) {
+      logger.warn('WhatsApp: [1b] URL strategy failed — falling back to text only', {
+        error: err1b instanceof Error ? err1b.message : String(err1b),
+      });
+    }
   }
+
+  // ── Strategy 2: text only (final fallback) ────────────────────────────────
+  await entry.sock.sendMessage(jid, { text });
+  logger.info('WhatsApp: [2] text-only message sent', { accountId, jid });
+  return true;
 };
 
 export const getGroups = async (

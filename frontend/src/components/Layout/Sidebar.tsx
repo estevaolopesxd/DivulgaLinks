@@ -14,6 +14,7 @@ import {
   BarChart2,
   Settings2,
   Users,
+  FileEdit,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../../hooks/useAuth';
@@ -25,6 +26,7 @@ const navItems = [
   { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { to: '/telegram', label: 'Telegram', icon: Send },
   { to: '/campaigns', label: 'Campanhas', icon: Megaphone },
+  { to: '/templates', label: 'Templates', icon: FileEdit },
   { to: '/metrics', label: 'Métricas', icon: BarChart2 },
   { to: '/group-config', label: 'Config. Grupos', icon: Settings2 },
   { to: '/logs', label: 'Logs', icon: FileText },

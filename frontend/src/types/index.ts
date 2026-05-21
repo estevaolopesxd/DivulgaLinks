@@ -241,3 +241,12 @@ export interface TopProduct {
   clicks: number;
   sent: number;
 }
+
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  content: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

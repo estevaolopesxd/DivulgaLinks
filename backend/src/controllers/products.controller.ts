@@ -345,9 +345,10 @@ export const generateTrackingUrl = async (
     }
 
     // Generate a short code for tracking
+    // URL points to /api/r/:shortCode which is proxied by nginx to the backend
     const shortCode = uuidv4().replace(/-/g, '').substring(0, 8);
     const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const trackingUrl = `${baseUrl}/r/${shortCode}`;
+    const trackingUrl = `${baseUrl}/api/r/${shortCode}`;
 
     await prisma.product.update({
       where: { id },

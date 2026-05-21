@@ -288,6 +288,17 @@ model DestinationConfig {
   @@map("destination_configs")
 }
 
+model MessageTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("message_templates")
+}
+
 model DestinationDailyStats {
   id                  String   @id @default(uuid())
   destinationConfigId String

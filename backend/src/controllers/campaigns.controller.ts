@@ -178,10 +178,6 @@ export const updateCampaign = async (
     const existing = await prisma.campaign.findUnique({ where: { id } });
     if (!existing) throw new AppError('Campaign not found', 404);
 
-    if (existing.status === CampaignStatus.ACTIVE) {
-      throw new AppError('Cannot update an active campaign. Pause it first.', 400);
-    }
-
     const campaign = await prisma.campaign.update({
       where: { id },
       data: {

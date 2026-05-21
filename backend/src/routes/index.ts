@@ -10,6 +10,8 @@ import logsRoutes from './logs.routes';
 import usersRoutes from './users.routes';
 import metricsRoutes from './metrics.routes';
 import groupConfigRoutes from './group-config.routes';
+import trackingRoutes from './tracking.routes';
+import templatesRoutes from './templates.routes';
 
 const router = Router();
 
@@ -22,6 +24,9 @@ router.get('/health', (_req, res) => {
   });
 });
 
+// Public tracking redirect — no auth required
+router.use('/r', trackingRoutes);
+
 router.use('/auth', authRoutes);
 router.use('/platforms', platformsRoutes);
 router.use('/products', productsRoutes);
@@ -33,5 +38,6 @@ router.use('/logs', logsRoutes);
 router.use('/users', usersRoutes);
 router.use('/metrics', metricsRoutes);
 router.use('/group-config', groupConfigRoutes);
+router.use('/templates', templatesRoutes);
 
 export default router;

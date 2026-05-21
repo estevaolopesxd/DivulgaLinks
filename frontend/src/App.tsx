@@ -12,6 +12,7 @@ import { Logs } from './pages/Logs';
 import Users from './pages/Users';
 import Metrics from './pages/Metrics';
 import GroupConfig from './pages/GroupConfig';
+import { Templates } from './pages/Templates';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
@@ -45,6 +46,7 @@ function App() {
         <Route path="campaigns" element={<Campaigns />} />
         <Route path="metrics" element={<Metrics />} />
         <Route path="group-config" element={<GroupConfig />} />
+        <Route path="templates" element={<Templates />} />
         <Route path="users" element={<Users />} />
         <Route path="logs" element={<Logs />} />
       </Route>

@@ -14,14 +14,19 @@ export const formatBRL = (value: number): string => {
  * Parse and replace template variables with product data.
  *
  * Available variables:
- *  {{name}}           - product title
- *  {{description}}    - product description
- *  {{price}}          - formatted current price in BRL
- *  {{original_price}} - formatted original price in BRL (or empty string)
- *  {{url}}            - tracking URL (falls back to affiliateUrl)
- *  {{image}}          - image URL
- *  {{category}}       - product category
- *  {{discount}}       - discount percentage (if originalPrice > price)
+ *  {{name}}             - product title
+ *  {{description}}      - product description
+ *  {{price}}            - formatted current price in BRL  (ex: R$ 51,90)
+ *  {{priceRaw}}         - current price numbers only      (ex: 51,90)
+ *  {{originalPrice}}    - formatted original price in BRL (ex: R$ 79,90) — empty if not set
+ *  {{originalPriceRaw}} - original price numbers only     (ex: 79,90) — empty if not set
+ *  {{original_price}}   - alias for {{originalPrice}}
+ *  {{priceBlock}}       - smart block: "De ~~R$ X~~ por *R$ Y*" or just "*R$ Y*" if no original
+ *  {{url}}              - short tracking URL (falls back to affiliateUrl)
+ *  {{link}}             - alias for {{url}}
+ *  {{image}}            - image URL
+ *  {{category}}         - product category
+ *  {{discount}}         - discount percentage (ex: 35%) — empty if no original price
  */
 export const parseTemplate = (template: string, product: Product): string => {
   const price = formatBRL(product.price);
@@ -35,12 +40,29 @@ export const parseTemplate = (template: string, product: Product): string => {
     discount = `${pct}%`;
   }
 
+  // Raw numeric price strings (no currency symbol)
+  const priceRaw = product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const originalPriceRaw = product.originalPrice
+    ? product.originalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '';
+
+  // Smart price block: shows "De ~~original~~ por *price*" when original price exists,
+  // otherwise shows just "*price*" — avoids broken strikethrough with empty value
+  const priceBlock =
+    product.originalPrice && product.originalPrice > product.price
+      ? `De ~~${originalPrice}~~ por *${price}*`
+      : `*${price}*`;
+
   const replacements: Record<string, string> = {
     '{{name}}': product.title,
     '{{title}}': product.title,
     '{{description}}': product.description ?? '',
     '{{price}}': price,
+    '{{priceRaw}}': priceRaw,
     '{{original_price}}': originalPrice,
+    '{{originalPrice}}': originalPrice,
+    '{{originalPriceRaw}}': originalPriceRaw,
+    '{{priceBlock}}': priceBlock,
     '{{url}}': product.trackingUrl ?? product.affiliateUrl,
     '{{link}}': product.trackingUrl ?? product.affiliateUrl,
     '{{image}}': product.imageUrl ?? '',
@@ -50,11 +72,26 @@ export const parseTemplate = (template: string, product: Product): string => {
 
   let result = template;
   for (const [placeholder, value] of Object.entries(replacements)) {
-    // Replace all occurrences, case-insensitive
     result = result.split(placeholder).join(value);
   }
 
-  return result;
+  // ── Post-processing: fix legacy template issues ─────────────────────────
+  // 1. Double currency symbol: "R$ R$ 79,90" → "R$ 79,90"
+  //    Happens when template was "R$ {{price}}" and {{price}} already includes "R$"
+  result = result.replace(/R\$\s+R\$/g, 'R$');
+
+  // 2. Remove "De ~~R$ ~~ por " block when originalPrice was empty.
+  //    Pattern only removes the block when content inside ~~ is purely empty/R$+spaces.
+  //    Does NOT remove when there's actual price text like "R$ 79,90" inside.
+  result = result.replace(/De\s+~~(R\$)?\s*~~\s+por\s+/gi, '');
+
+  // 3. Any remaining completely empty strikethrough: "~~~~" → ""
+  result = result.replace(/~~\s*~~/g, '');
+
+  // 4. Clean up multiple consecutive blank lines that can appear after removals
+  result = result.replace(/\n{3,}/g, '\n\n');
+
+  return result.trim();
 };
 
 export default parseTemplate;

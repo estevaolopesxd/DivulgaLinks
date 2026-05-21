@@ -22,6 +22,7 @@ import type {
   HourlyPoint,
   MetricsSummary,
   TopProduct,
+  MessageTemplate,
 } from '../types';
 
 const api = axios.create({
@@ -233,7 +234,7 @@ export const campaignsApi = {
     return res.data.campaign;
   },
   update: async (id: string, data: Partial<Campaign>) => {
-    const res = await api.put<{ campaign: Campaign }>(`/api/campaigns/${id}`, data);
+    const res = await api.patch<{ campaign: Campaign }>(`/api/campaigns/${id}`, data);
     return res.data.campaign;
   },
   delete: async (id: string) => {
@@ -376,6 +377,17 @@ export const groupConfigApi = {
   delete: (id: string) => api.delete(`/api/group-config/${id}`).then(r => r.data),
   getStats: (id: string) =>
     api.get<{ stats: DestinationConfig['dailyStats'] }>(`/api/group-config/${id}/stats`).then(r => r.data),
+};
+
+// ─── Templates API ────────────────────────────────────────────────────────────
+
+export const templatesApi = {
+  list: () => api.get<{ templates: MessageTemplate[] }>('/api/templates').then(r => r.data.templates),
+  create: (data: { name: string; content: string; isActive: boolean }) =>
+    api.post<{ template: MessageTemplate }>('/api/templates', data).then(r => r.data.template),
+  update: (id: string, data: Partial<{ name: string; content: string; isActive: boolean }>) =>
+    api.patch<{ template: MessageTemplate }>(`/api/templates/${id}`, data).then(r => r.data.template),
+  delete: (id: string) => api.delete(`/api/templates/${id}`),
 };
 
 export default api;
