@@ -161,6 +161,7 @@ export const stopCampaign = async (campaignId: string): Promise<void> => {
  * Process a campaign dispatch: send messages for each product to each destination.
  */
 export const processCampaignJob = async (campaignId: string): Promise<void> => {
+  const dispatchStartedAt = Date.now(); // usado para calcular próximo ciclo a partir do INÍCIO
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
     include: {
@@ -482,14 +483,17 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
     }
   }
 
-  // Schedule next run
-  await scheduleNextRun(campaignId);
+  // Schedule next run a partir do INÍCIO deste ciclo (não do fim)
+  await scheduleNextRun(campaignId, dispatchStartedAt);
 };
 
 /**
  * Schedule the next campaign dispatch based on intervalMinutes.
+ * @param dispatchStartedAt - timestamp de quando o ciclo atual COMEÇOU.
+ *   O próximo ciclo é agendado para (dispatchStartedAt + intervalMinutes),
+ *   garantindo que o intervalo configurado seja respeitado mesmo com delay entre msgs.
  */
-export const scheduleNextRun = async (campaignId: string): Promise<void> => {
+export const scheduleNextRun = async (campaignId: string, dispatchStartedAt?: number): Promise<void> => {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
     select: {
@@ -519,9 +523,13 @@ export const scheduleNextRun = async (campaignId: string): Promise<void> => {
     return;
   }
 
-  // Calcula próxima execução com base no intervalo
+  // Calcula próxima execução a partir do INÍCIO do ciclo atual
+  // Se o ciclo demorou mais que o intervalo, agenda para daqui 10s (não acumula atraso)
   const intervalMs = campaign.intervalMinutes * 60 * 1000;
-  let nextRunAt = new Date(Date.now() + intervalMs);
+  const cycleStart = dispatchStartedAt ?? Date.now();
+  const idealNextRun = cycleStart + intervalMs;
+  const minNextRun = Date.now() + 10_000; // pelo menos 10s no futuro
+  let nextRunAt = new Date(Math.max(idealNextRun, minNextRun));
 
   // Se a próxima execução cai fora da janela, adiantamos para a abertura da janela
   if (campaign.allowedStartTime && campaign.allowedEndTime) {

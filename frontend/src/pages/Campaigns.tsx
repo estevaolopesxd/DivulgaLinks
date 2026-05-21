@@ -280,8 +280,8 @@ export const Campaigns: React.FC = () => {
       description: form.description || undefined,
       status: form.status,
       messageTemplate: form.messageTemplate,
-      intervalMinutes: parseInt(form.intervalMinutes),
-      delayBetweenMessages: parseInt(form.delayBetweenMessages),
+      intervalMinutes: parseInt(form.intervalMinutes) || 60,
+      delayBetweenMessages: parseInt(form.delayBetweenMessages) || 0,
       isActive: form.status === 'ACTIVE',
       platforms: [],
       allowedStartTime: form.restrictTime ? form.allowedStartTime : undefined,
@@ -449,12 +449,12 @@ export const Campaigns: React.FC = () => {
             <TextArea label="Descrição" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} />
             <Select label="Status" options={statusOptions} value={form.status} onChange={(e) => setForm(f => ({ ...f, status: e.target.value as Campaign['status'] }))} />
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Intervalo (minutos)" type="number" required value={form.intervalMinutes}
+              <Input label="Intervalo entre ciclos (min)" type="number" required value={form.intervalMinutes}
                 onChange={(e) => setForm(f => ({ ...f, intervalMinutes: e.target.value }))}
-                hint="Intervalo entre ciclos de envio" />
-              <Input label="Delay entre mensagens (ms)" type="number" required value={form.delayBetweenMessages}
+                hint="A cada quantos minutos a campanha dispara um novo ciclo completo" />
+              <Input label="Pausa entre mensagens (ms)" type="number" value={form.delayBetweenMessages}
                 onChange={(e) => setForm(f => ({ ...f, delayBetweenMessages: e.target.value }))}
-                hint="Tempo entre cada mensagem" />
+                hint="Espera (em ms) entre cada mensagem dentro do ciclo. 0 = sem pausa" />
             </div>
             {/* Product repeat mode */}
             <div>
