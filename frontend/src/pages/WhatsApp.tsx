@@ -90,14 +90,16 @@ export const WhatsApp: React.FC = () => {
 
   const connectSocket = (accountId: string) => {
     if (socketRef.current) socketRef.current.disconnect();
-    const socket = io(import.meta.env.VITE_SOCKET_URL ?? '', { transports: ['websocket'] });
+    const socket = io(import.meta.env.VITE_SOCKET_URL ?? '', { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
-    socket.emit('join-account', accountId);
-    socket.on('qr-code', (qr: string) => {
+    socket.on('connect', () => {
+      socket.emit('subscribe:whatsapp', accountId);
+    });
+    socket.on('whatsapp:qr', ({ qr }: { accountId: string; qr: string }) => {
       setQrCode(qr);
       setQrStatus('QR gerado, escaneie com seu WhatsApp');
     });
-    socket.on('status-change', (status: string) => {
+    socket.on('whatsapp:status', ({ status }: { accountId: string; status: string }) => {
       setQrStatus(status);
       queryClient.invalidateQueries({ queryKey: ['whatsapp'] });
       if (status === 'CONNECTED') {

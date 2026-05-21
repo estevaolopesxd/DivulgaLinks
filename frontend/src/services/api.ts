@@ -361,7 +361,7 @@ export const metricsApi = {
 
 export const groupConfigApi = {
   list: (params?: { accountId?: string }) =>
-    api.get<DestinationConfig[]>('/api/group-config', { params }).then(r => r.data),
+    api.get<{ configs: DestinationConfig[] }>('/api/group-config', { params }).then(r => r.data.configs ?? []),
   get: (id: string) => api.get<DestinationConfig>(`/api/group-config/${id}`).then(r => r.data),
   upsert: (data: Partial<DestinationConfig>) =>
     api.post<DestinationConfig>('/api/group-config', data).then(r => r.data),

@@ -36,11 +36,21 @@ const bootstrap = async (): Promise<void> => {
   const server = http.createServer(app);
 
   // 5. Attach Socket.IO for real-time QR code streaming
+  const rawCorsOrigins = process.env.CORS_ORIGINS ?? env.FRONTEND_URL;
+  const allowAllOrigins = rawCorsOrigins.trim() === '*';
+  const socketCorsOrigin = allowAllOrigins
+    ? true
+    : [
+        ...rawCorsOrigins.split(',').map((o) => o.trim()).filter(Boolean),
+        'http://localhost:5173',
+        'http://localhost:3000',
+      ];
+
   const io = new SocketIOServer(server, {
     cors: {
-      origin: [env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'],
+      origin: socketCorsOrigin,
       methods: ['GET', 'POST'],
-      credentials: true,
+      credentials: !allowAllOrigins,
     },
     transports: ['websocket', 'polling'],
   });
