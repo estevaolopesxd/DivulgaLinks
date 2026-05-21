@@ -327,6 +327,22 @@ export const restoreSessions = async (): Promise<void> => {
   }
 };
 
+/**
+ * Remove os arquivos de sessão do disco para um accountId.
+ * Útil ao excluir uma conta que está DISCONNECTED (sem entrada em memória).
+ */
+export const deleteSessionFiles = (accountId: string): void => {
+  const sessionPath = path.join(sessionsDir, accountId);
+  try {
+    if (fs.existsSync(sessionPath)) {
+      fs.rmSync(sessionPath, { recursive: true, force: true });
+      logger.info('WhatsApp: session files deleted', { accountId, sessionPath });
+    }
+  } catch (err) {
+    logger.warn('WhatsApp: failed to delete session files', { accountId, error: err });
+  }
+};
+
 const whatsappService = {
   setSocketIO,
   initializeClient,
@@ -336,6 +352,7 @@ const whatsappService = {
   getGroups,
   getChannels,
   disconnectClient,
+  deleteSessionFiles,
   restoreSessions,
 };
 

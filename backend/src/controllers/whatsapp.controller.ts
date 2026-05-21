@@ -65,10 +65,14 @@ export const deleteAccount = async (
   try {
     const { id } = req.params;
 
-    // Disconnect if active
+    // Se a sessão estiver ativa, desconectar primeiro (já limpa a pasta internamente)
     const status = whatsappService.getClientStatus(id);
     if (status === WhatsAppStatus.CONNECTED || status === WhatsAppStatus.CONNECTING) {
       await whatsappService.disconnectClient(id);
+    } else {
+      // Sessão já desconectada — garantir que os arquivos sejam removidos do disco
+      // (evita conflito de sessão antiga ao reconectar com novo QR Code)
+      whatsappService.deleteSessionFiles(id);
     }
 
     await prisma.whatsAppAccount.delete({ where: { id } });
@@ -190,7 +194,17 @@ export const disconnectAccount = async (
       throw new AppError('WhatsApp account not found', 404);
     }
 
-    await whatsappService.disconnectClient(id);
+    const status = whatsappService.getClientStatus(id);
+    if (status === WhatsAppStatus.CONNECTED || status === WhatsAppStatus.CONNECTING) {
+      await whatsappService.disconnectClient(id); // já limpa arquivos internamente
+    } else {
+      // Sem sessão ativa em memória — limpar arquivos do disco mesmo assim
+      whatsappService.deleteSessionFiles(id);
+      await prisma.whatsAppAccount.update({
+        where: { id },
+        data: { status: WhatsAppStatus.DISCONNECTED, qrCode: null },
+      });
+    }
 
     res.json({ message: 'Account disconnected' });
   } catch (error) {
