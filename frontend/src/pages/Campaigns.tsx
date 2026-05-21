@@ -5,7 +5,7 @@ import {
   Package, ChevronRight, X, MessageSquare, CheckCircle2, CalendarDays,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { campaignsApi, whatsappApi, telegramApi, productsApi } from '../services/api';
+import { campaignsApi, whatsappApi, telegramApi, productsApi, groupConfigApi } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Badge, statusToBadgeVariant, statusLabel } from '../components/ui/Badge';
@@ -13,7 +13,7 @@ import { Input, TextArea } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageLoader } from '../components/ui/LoadingSpinner';
-import type { Campaign, CampaignDestination, Product, WhatsAppAccount, TelegramBot } from '../types';
+import type { Campaign, CampaignDestination, Product, WhatsAppAccount, WhatsAppGroup, TelegramBot, TelegramChat, DestinationConfig } from '../types';
 
 
 type ModalTab = 'settings' | 'schedule' | 'destinations' | 'products';
@@ -83,6 +83,7 @@ export const Campaigns: React.FC = () => {
   const [destAccount, setDestAccount] = useState('');
   const [destId, setDestId] = useState('');
   const [destName, setDestName] = useState('');
+  const [destSearch, setDestSearch] = useState('');
 
   // Sub-modal for adding product
   const [addProductOpen, setAddProductOpen] = useState(false);
@@ -109,6 +110,32 @@ export const Campaigns: React.FC = () => {
   const { data: productsData } = useQuery({
     queryKey: ['products', 1, productSearch],
     queryFn: () => productsApi.list({ page: 1, limit: 20, search: productSearch || undefined }),
+    retry: false,
+  });
+
+  // Destination group/chat lists (fetched when dest modal is open with an account selected)
+  const { data: waGroups = [], isLoading: waGroupsLoading } = useQuery({
+    queryKey: ['wa-groups', destAccount],
+    queryFn: () => whatsappApi.getGroups(destAccount),
+    enabled: !!destAccount && destType === 'WHATSAPP_GROUP',
+    retry: false,
+  });
+  const { data: waChannels = [], isLoading: waChannelsLoading } = useQuery({
+    queryKey: ['wa-channels', destAccount],
+    queryFn: () => whatsappApi.getChannels(destAccount),
+    enabled: !!destAccount && destType === 'WHATSAPP_CHANNEL',
+    retry: false,
+  });
+  const { data: tgChats = [], isLoading: tgChatsLoading } = useQuery({
+    queryKey: ['tg-chats', destAccount],
+    queryFn: () => telegramApi.getChats(destAccount),
+    enabled: !!destAccount && (destType === 'TELEGRAM_GROUP' || destType === 'TELEGRAM_CHANNEL'),
+    retry: false,
+  });
+  const { data: destConfigs = [] } = useQuery({
+    queryKey: ['dest-configs', destAccount],
+    queryFn: () => groupConfigApi.list({ accountId: destAccount }),
+    enabled: !!destAccount,
     retry: false,
   });
 
@@ -154,7 +181,7 @@ export const Campaigns: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       toast.success('Destino adicionado!');
       setAddDestOpen(false);
-      setDestType(''); setDestAccount(''); setDestId(''); setDestName('');
+      setDestType(''); setDestAccount(''); setDestId(''); setDestName(''); setDestSearch('');
     },
     onError: () => toast.error('Erro ao adicionar destino.'),
   });
@@ -233,6 +260,28 @@ export const Campaigns: React.FC = () => {
   const currentCampaignData = workingCampaign
     ? (campaigns as Campaign[]).find((c) => c.id === workingCampaign.id) ?? workingCampaign
     : null;
+
+  // Normalise the group/channel/chat list shown in the add-destination modal
+  const rawDestList: { id: string; name: string; participantCount?: number }[] =
+    destType === 'WHATSAPP_GROUP'
+      ? (waGroups as WhatsAppGroup[])
+      : destType === 'WHATSAPP_CHANNEL'
+        ? (waChannels as WhatsAppGroup[])
+        : (tgChats as TelegramChat[]).map((c) => ({ id: c.id, name: c.title, participantCount: c.memberCount }));
+
+  const destListLoading =
+    destType === 'WHATSAPP_GROUP' ? waGroupsLoading :
+    destType === 'WHATSAPP_CHANNEL' ? waChannelsLoading :
+    tgChatsLoading;
+
+  const filteredDestList = rawDestList.filter((item) =>
+    !destSearch || item.name.toLowerCase().includes(destSearch.toLowerCase()),
+  );
+
+  const clearDestModal = () => {
+    setAddDestOpen(false);
+    setDestType(''); setDestAccount(''); setDestId(''); setDestName(''); setDestSearch('');
+  };
 
   if (isLoading) return <PageLoader />;
 
@@ -593,10 +642,10 @@ export const Campaigns: React.FC = () => {
       </Modal>
 
       {/* Add destination sub-modal */}
-      <Modal isOpen={addDestOpen} onClose={() => setAddDestOpen(false)} title="Adicionar Destino" size="md"
+      <Modal isOpen={addDestOpen} onClose={clearDestModal} title="Adicionar Destino" size="md"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setAddDestOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={clearDestModal}>Cancelar</Button>
             <Button variant="primary" loading={addDestMutation.isPending} disabled={!destType || !destAccount || !destId} onClick={handleAddDest}>
               Adicionar
             </Button>
@@ -604,23 +653,124 @@ export const Campaigns: React.FC = () => {
         }
       >
         <div className="space-y-4">
-          <Select label="Tipo de Destino" required placeholder="Selecione..." options={DEST_TYPES} value={destType}
-            onChange={(e) => { setDestType(e.target.value as CampaignDestination['type']); setDestAccount(''); setDestId(''); }} />
+          {/* Step 1 – type */}
+          <Select
+            label="Tipo de Destino"
+            required
+            placeholder="Selecione..."
+            options={DEST_TYPES}
+            value={destType}
+            onChange={(e) => {
+              setDestType(e.target.value as CampaignDestination['type']);
+              setDestAccount(''); setDestId(''); setDestName(''); setDestSearch('');
+            }}
+          />
+
+          {/* Step 2 – account */}
           {destType && (
+            destType.startsWith('WHATSAPP') ? (
+              <Select
+                label="Conta WhatsApp"
+                required
+                placeholder="Selecione a conta..."
+                value={destAccount}
+                onChange={(e) => { setDestAccount(e.target.value); setDestId(''); setDestName(''); setDestSearch(''); }}
+                options={(waAccounts as WhatsAppAccount[])
+                  .filter((a) => a.status === 'CONNECTED')
+                  .map((a) => ({ value: a.id, label: `${a.name} (${a.phoneNumber})` }))}
+              />
+            ) : (
+              <Select
+                label="Bot Telegram"
+                required
+                placeholder="Selecione o bot..."
+                value={destAccount}
+                onChange={(e) => { setDestAccount(e.target.value); setDestId(''); setDestName(''); setDestSearch(''); }}
+                options={(tgBots as TelegramBot[]).map((b) => ({ value: b.id, label: `${b.name} (@${b.username ?? '?'})` }))}
+              />
+            )
+          )}
+
+          {/* Step 3 – pick from list */}
+          {destType && destAccount && (
             <>
-              {destType.startsWith('WHATSAPP') ? (
-                <Select label="Conta WhatsApp" required placeholder="Selecione a conta..." value={destAccount}
-                  onChange={(e) => setDestAccount(e.target.value)}
-                  options={(waAccounts as WhatsAppAccount[]).map(a => ({ value: a.id, label: `${a.name} (${a.phoneNumber})` }))} />
-              ) : (
-                <Select label="Bot Telegram" required placeholder="Selecione o bot..." value={destAccount}
-                  onChange={(e) => setDestAccount(e.target.value)}
-                  options={(tgBots as TelegramBot[]).map(b => ({ value: b.id, label: `${b.name} (@${b.username ?? '?'})` }))} />
+              <Input
+                placeholder={`Buscar ${destType.includes('CHANNEL') ? 'canal' : 'grupo'}...`}
+                value={destSearch}
+                onChange={(e) => setDestSearch(e.target.value)}
+              />
+
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
+                {destListLoading ? (
+                  <div className="text-center py-8 text-sm text-gray-400">Carregando grupos...</div>
+                ) : filteredDestList.length === 0 ? (
+                  <div className="text-center py-8 text-sm text-gray-400">
+                    {destSearch
+                      ? 'Nenhum resultado para a busca'
+                      : 'Nenhum grupo/canal encontrado.\nVerifique se a conta está conectada.'}
+                  </div>
+                ) : (
+                  filteredDestList.map((item) => {
+                    const hasConfig = (destConfigs as DestinationConfig[]).some((c) => c.destinationId === item.id);
+                    const alreadyAdded = currentCampaignData?.destinations?.some((d) => d.destinationId === item.id);
+                    const isSelected = destId === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        disabled={!!alreadyAdded}
+                        onClick={() => { setDestId(item.id); setDestName(item.name); }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left ${
+                          isSelected
+                            ? 'border-primary-500 bg-primary-50'
+                            : alreadyAdded
+                              ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                              : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {/* Avatar */}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary-100' : 'bg-gray-100'}`}>
+                          <MessageSquare size={14} className={isSelected ? 'text-primary-600' : 'text-gray-400'} />
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate ${isSelected ? 'text-primary-700' : 'text-gray-800'}`}>
+                            {item.name}
+                          </p>
+                          {item.participantCount != null && (
+                            <p className="text-xs text-gray-400">{item.participantCount} participante{item.participantCount !== 1 ? 's' : ''}</p>
+                          )}
+                        </div>
+
+                        {/* Badges */}
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {hasConfig && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
+                              Configurado
+                            </span>
+                          )}
+                          {alreadyAdded && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                              Já adicionado
+                            </span>
+                          )}
+                          {isSelected && !alreadyAdded && (
+                            <CheckCircle2 size={16} className="text-primary-500" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {destId && (
+                <p className="text-xs text-primary-600 font-medium flex items-center gap-1.5 bg-primary-50 px-3 py-2 rounded-lg border border-primary-100">
+                  <CheckCircle2 size={13} />
+                  Selecionado: <span className="font-semibold">{destName}</span>
+                </p>
               )}
-              <Input label="ID do Destino" required placeholder="ID do grupo/canal" value={destId}
-                onChange={(e) => setDestId(e.target.value)} />
-              <Input label="Nome do Destino" required placeholder="Nome do grupo/canal" value={destName}
-                onChange={(e) => setDestName(e.target.value)} />
             </>
           )}
         </div>
