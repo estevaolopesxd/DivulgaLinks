@@ -61,11 +61,8 @@ export const WhatsApp: React.FC = () => {
     mutationFn: (id: string) => whatsappApi.initialize(id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['whatsapp'] });
-      const account = (accounts as WhatsAppAccount[]).find((a) => a.id === id);
-      if (account) {
-        setQrModalAccount(account);
-        connectSocket(id);
-      }
+      // connectSocket must run regardless of whether the account is found in cache
+      connectSocket(id);
     },
     onError: () => toast.error('Erro ao inicializar conta.'),
   });
@@ -95,10 +92,17 @@ export const WhatsApp: React.FC = () => {
     socketRef.current = socket;
     socket.on('connect', () => {
       socket.emit('subscribe:whatsapp', accountId);
+      // Fetch the current QR via HTTP as fallback in case the socket missed the initial emit
+      whatsappApi.getQR(accountId).then(({ qrCode: qr }) => {
+        if (qr) {
+          setQrCode(qr);
+          setQrStatus('Escaneie agora! O QR expira em ~20 segundos');
+        }
+      }).catch(() => { /* ignore — socket will deliver the QR */ });
     });
     socket.on('whatsapp:qr', ({ qr }: { accountId: string; qr: string }) => {
       setQrCode(qr);
-      setQrStatus('QR gerado, escaneie com seu WhatsApp');
+      setQrStatus('Escaneie agora! O QR expira em ~20 segundos');
     });
     socket.on('whatsapp:status', ({ status }: { accountId: string; status: string }) => {
       setQrStatus(status);
