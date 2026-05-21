@@ -1,4 +1,4 @@
-import { Queue, Job } from 'bullmq';
+import { Queue } from 'bullmq';
 import { CampaignStatus, DestinationType, MessageStatus, ProductRepeatMode } from '@prisma/client';
 import { prisma } from '../config/database';
 import { redis } from '../config/redis';
