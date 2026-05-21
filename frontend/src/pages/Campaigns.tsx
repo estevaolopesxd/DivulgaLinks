@@ -83,13 +83,13 @@ export const Campaigns: React.FC = () => {
   const [addDestOpen, setAddDestOpen] = useState(false);
   const [destType, setDestType] = useState<CampaignDestination['type'] | ''>('');
   const [destAccount, setDestAccount] = useState('');
-  const [destId, setDestId] = useState('');
-  const [destName, setDestName] = useState('');
+  const [selectedDestItems, setSelectedDestItems] = useState<{ id: string; name: string }[]>([]);
   const [destSearch, setDestSearch] = useState('');
 
   // Sub-modal for adding product
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [productSearch, setProductSearch] = useState('');
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
 
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ['campaigns'],
@@ -186,16 +186,35 @@ export const Campaigns: React.FC = () => {
   });
 
   const addDestMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Omit<CampaignDestination, 'id' | 'campaignId'> }) =>
-      campaignsApi.addDestination(id, data),
+    mutationFn: async ({
+      campaignId, type, accountId, accountType, items,
+    }: {
+      campaignId: string;
+      type: CampaignDestination['type'];
+      accountId: string;
+      accountType: string;
+      items: { id: string; name: string }[];
+    }) => {
+      await Promise.all(
+        items.map((item) =>
+          campaignsApi.addDestination(campaignId, {
+            type,
+            destinationId: item.id,
+            destinationName: item.name,
+            accountId,
+            accountType,
+            isActive: true,
+          }),
+        ),
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['campaign', workingCampaign?.id] });
-      toast.success('Destino adicionado!');
-      setAddDestOpen(false);
-      setDestType(''); setDestAccount(''); setDestId(''); setDestName(''); setDestSearch('');
+      toast.success('Destino(s) adicionado(s)!');
+      clearDestModal();
     },
-    onError: () => toast.error('Erro ao adicionar destino.'),
+    onError: () => toast.error('Erro ao adicionar destino(s).'),
   });
 
   const removeDestMutation = useMutation({
@@ -208,13 +227,16 @@ export const Campaigns: React.FC = () => {
   });
 
   const addProductMutation = useMutation({
-    mutationFn: ({ cid, pid }: { cid: string; pid: string }) => campaignsApi.addProduct(cid, pid),
+    mutationFn: async ({ cid, pids }: { cid: string; pids: string[] }) => {
+      await Promise.all(pids.map((pid) => campaignsApi.addProduct(cid, pid)));
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['campaign', workingCampaign?.id] });
-      toast.success('Produto adicionado!');
+      toast.success('Produto(s) adicionado(s)!');
+      setSelectedProductIds([]);
     },
-    onError: () => toast.error('Erro ao adicionar produto.'),
+    onError: () => toast.error('Erro ao adicionar produto(s).'),
   });
 
   const removeProductMutation = useMutation({
@@ -276,18 +298,14 @@ export const Campaigns: React.FC = () => {
   };
 
   const handleAddDest = () => {
-    if (!workingCampaign || !destType || !destAccount || !destId) return;
+    if (!workingCampaign || !destType || !destAccount || selectedDestItems.length === 0) return;
     const accountType = destType.startsWith('WHATSAPP') ? 'WHATSAPP' : 'TELEGRAM';
     addDestMutation.mutate({
-      id: workingCampaign.id,
-      data: {
-        type: destType as CampaignDestination['type'],
-        destinationId: destId,
-        destinationName: destName,
-        accountId: destAccount,
-        accountType,
-        isActive: true,
-      },
+      campaignId: workingCampaign.id,
+      type: destType as CampaignDestination['type'],
+      accountId: destAccount,
+      accountType,
+      items: selectedDestItems,
     });
   };
 
@@ -313,7 +331,7 @@ export const Campaigns: React.FC = () => {
 
   const clearDestModal = () => {
     setAddDestOpen(false);
-    setDestType(''); setDestAccount(''); setDestId(''); setDestName(''); setDestSearch('');
+    setDestType(''); setDestAccount(''); setSelectedDestItems([]); setDestSearch('');
   };
 
   if (isLoading) return <PageLoader />;
@@ -715,8 +733,8 @@ export const Campaigns: React.FC = () => {
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={clearDestModal}>Cancelar</Button>
-            <Button variant="primary" loading={addDestMutation.isPending} disabled={!destType || !destAccount || !destId} onClick={handleAddDest}>
-              Adicionar
+            <Button variant="primary" loading={addDestMutation.isPending} disabled={!destType || !destAccount || selectedDestItems.length === 0} onClick={handleAddDest}>
+              {selectedDestItems.length > 1 ? `Adicionar ${selectedDestItems.length} destinos` : 'Adicionar'}
             </Button>
           </div>
         }
@@ -731,7 +749,7 @@ export const Campaigns: React.FC = () => {
             value={destType}
             onChange={(e) => {
               setDestType(e.target.value as CampaignDestination['type']);
-              setDestAccount(''); setDestId(''); setDestName(''); setDestSearch('');
+              setDestAccount(''); setSelectedDestItems([]); setDestSearch('');
             }}
           />
 
@@ -743,7 +761,7 @@ export const Campaigns: React.FC = () => {
                 required
                 placeholder="Selecione a conta..."
                 value={destAccount}
-                onChange={(e) => { setDestAccount(e.target.value); setDestId(''); setDestName(''); setDestSearch(''); }}
+                onChange={(e) => { setDestAccount(e.target.value); setSelectedDestItems([]); setDestSearch(''); }}
                 options={(waAccounts as WhatsAppAccount[])
                   .filter((a) => a.status === 'CONNECTED')
                   .map((a) => ({ value: a.id, label: `${a.name} (${a.phoneNumber})` }))}
@@ -754,7 +772,7 @@ export const Campaigns: React.FC = () => {
                 required
                 placeholder="Selecione o bot..."
                 value={destAccount}
-                onChange={(e) => { setDestAccount(e.target.value); setDestId(''); setDestName(''); setDestSearch(''); }}
+                onChange={(e) => { setDestAccount(e.target.value); setSelectedDestItems([]); setDestSearch(''); }}
                 options={(tgBots as TelegramBot[]).map((b) => ({ value: b.id, label: `${b.name} (@${b.username ?? '?'})` }))}
               />
             )
@@ -769,104 +787,218 @@ export const Campaigns: React.FC = () => {
                 onChange={(e) => setDestSearch(e.target.value)}
               />
 
-              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
+              {/* Select-all header */}
+              {!destListLoading && filteredDestList.length > 0 && (() => {
+                const available = filteredDestList.filter(
+                  (i) => !currentCampaignData?.destinations?.some((d) => d.destinationId === i.id),
+                );
+                const allChecked = available.length > 0 && available.every((i) => selectedDestItems.some((s) => s.id === i.id));
+                return (
+                  <div className="flex items-center justify-between px-1 pb-1 border-b border-gray-100">
+                    <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={allChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDestItems((prev) => {
+                              const ids = new Set(prev.map((p) => p.id));
+                              return [...prev, ...available.filter((a) => !ids.has(a.id))];
+                            });
+                          } else {
+                            const ids = new Set(available.map((a) => a.id));
+                            setSelectedDestItems((prev) => prev.filter((p) => !ids.has(p.id)));
+                          }
+                        }}
+                        className="accent-primary-500"
+                      />
+                      Selecionar todos ({available.length} disponíveis)
+                    </label>
+                    {selectedDestItems.length > 0 && (
+                      <span className="text-xs font-medium text-primary-600">
+                        {selectedDestItems.length} selecionado{selectedDestItems.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="space-y-1 max-h-56 overflow-y-auto pr-0.5">
                 {destListLoading ? (
                   <div className="text-center py-8 text-sm text-gray-400">Carregando grupos...</div>
                 ) : filteredDestList.length === 0 ? (
                   <div className="text-center py-8 text-sm text-gray-400">
-                    {destSearch
-                      ? 'Nenhum resultado para a busca'
-                      : 'Nenhum grupo/canal encontrado.\nVerifique se a conta está conectada.'}
+                    {destSearch ? 'Nenhum resultado' : 'Nenhum grupo/canal encontrado'}
                   </div>
                 ) : (
                   filteredDestList.map((item) => {
                     const hasConfig = (destConfigs as DestinationConfig[]).some((c) => c.destinationId === item.id);
                     const alreadyAdded = currentCampaignData?.destinations?.some((d) => d.destinationId === item.id);
-                    const isSelected = destId === item.id;
+                    const isChecked = selectedDestItems.some((s) => s.id === item.id);
                     return (
-                      <button
+                      <label
                         key={item.id}
-                        type="button"
-                        disabled={!!alreadyAdded}
-                        onClick={() => { setDestId(item.id); setDestName(item.name); }}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left ${
-                          isSelected
-                            ? 'border-primary-500 bg-primary-50'
-                            : alreadyAdded
-                              ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all cursor-pointer ${
+                          alreadyAdded
+                            ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                            : isChecked
+                              ? 'border-primary-400 bg-primary-50'
                               : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
                         }`}
                       >
+                        <input
+                          type="checkbox"
+                          disabled={!!alreadyAdded}
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedDestItems((prev) => [...prev, { id: item.id, name: item.name }]);
+                            } else {
+                              setSelectedDestItems((prev) => prev.filter((s) => s.id !== item.id));
+                            }
+                          }}
+                          className="accent-primary-500 flex-shrink-0"
+                        />
                         {/* Avatar */}
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary-100' : 'bg-gray-100'}`}>
-                          <MessageSquare size={14} className={isSelected ? 'text-primary-600' : 'text-gray-400'} />
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${isChecked ? 'bg-primary-100' : 'bg-gray-100'}`}>
+                          <MessageSquare size={13} className={isChecked ? 'text-primary-600' : 'text-gray-400'} />
                         </div>
-
                         {/* Info */}
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${isSelected ? 'text-primary-700' : 'text-gray-800'}`}>
+                          <p className={`text-sm font-medium truncate ${isChecked ? 'text-primary-700' : 'text-gray-800'}`}>
                             {item.name}
                           </p>
                           {item.participantCount != null && (
                             <p className="text-xs text-gray-400">{item.participantCount} participante{item.participantCount !== 1 ? 's' : ''}</p>
                           )}
                         </div>
-
                         {/* Badges */}
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {hasConfig && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
-                              Configurado
-                            </span>
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Configurado</span>
                           )}
                           {alreadyAdded && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-                              Já adicionado
-                            </span>
-                          )}
-                          {isSelected && !alreadyAdded && (
-                            <CheckCircle2 size={16} className="text-primary-500" />
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">Já adicionado</span>
                           )}
                         </div>
-                      </button>
+                      </label>
                     );
                   })
                 )}
               </div>
-
-              {destId && (
-                <p className="text-xs text-primary-600 font-medium flex items-center gap-1.5 bg-primary-50 px-3 py-2 rounded-lg border border-primary-100">
-                  <CheckCircle2 size={13} />
-                  Selecionado: <span className="font-semibold">{destName}</span>
-                </p>
-              )}
             </>
           )}
         </div>
       </Modal>
 
       {/* Add product sub-modal */}
-      <Modal isOpen={addProductOpen} onClose={() => setAddProductOpen(false)} title="Adicionar Produto" size="lg"
-        footer={<div className="flex justify-end"><Button variant="outline" onClick={() => setAddProductOpen(false)}>Fechar</Button></div>}
+      <Modal
+        isOpen={addProductOpen}
+        onClose={() => { setAddProductOpen(false); setSelectedProductIds([]); }}
+        title="Adicionar Produto"
+        size="lg"
+        footer={
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-gray-400">
+              {selectedProductIds.length > 0 ? `${selectedProductIds.length} selecionado${selectedProductIds.length !== 1 ? 's' : ''}` : 'Nenhum selecionado'}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setAddProductOpen(false); setSelectedProductIds([]); }}>Fechar</Button>
+              <Button
+                variant="primary"
+                loading={addProductMutation.isPending}
+                disabled={selectedProductIds.length === 0 || !currentCampaignData}
+                onClick={() => {
+                  if (currentCampaignData && selectedProductIds.length > 0) {
+                    addProductMutation.mutate({ cid: currentCampaignData.id, pids: selectedProductIds });
+                  }
+                }}
+              >
+                {selectedProductIds.length > 1 ? `Adicionar ${selectedProductIds.length} produtos` : 'Adicionar'}
+              </Button>
+            </div>
+          </div>
+        }
       >
         <div className="space-y-3">
           <Input placeholder="Buscar produto..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {(productsData?.data ?? []).map((p: Product) => (
-              <div key={p.id} className="flex items-center gap-3 p-3 border border-gray-100 rounded-lg hover:bg-gray-50">
-                <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
-                  {p.imageUrl ? <img src={p.imageUrl} className="w-10 h-10 rounded object-cover" alt="" /> : <Package size={16} className="text-gray-400" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{p.title}</p>
-                  <p className="text-xs text-gray-500">R$ {(p.price ?? 0).toFixed(2)}</p>
-                </div>
-                <Button size="xs" variant="outline"
-                  onClick={() => { if (currentCampaignData) addProductMutation.mutate({ cid: currentCampaignData.id, pid: p.id }); }}>
-                  Adicionar
-                </Button>
+
+          {/* Select-all header */}
+          {(productsData?.data ?? []).length > 0 && (() => {
+            const available = (productsData?.data ?? []).filter(
+              (p) => !currentCampaignData?.products?.some((cp) => cp.id === p.id),
+            );
+            const allChecked = available.length > 0 && available.every((p) => selectedProductIds.includes(p.id));
+            return (
+              <div className="flex items-center justify-between px-1 pb-1 border-b border-gray-100">
+                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedProductIds((prev) => {
+                          const ids = new Set(prev);
+                          available.forEach((p) => ids.add(p.id));
+                          return [...ids];
+                        });
+                      } else {
+                        const ids = new Set(available.map((p) => p.id));
+                        setSelectedProductIds((prev) => prev.filter((id) => !ids.has(id)));
+                      }
+                    }}
+                    className="accent-primary-500"
+                  />
+                  Selecionar todos ({available.length} disponíveis)
+                </label>
+                {selectedProductIds.length > 0 && (
+                  <span className="text-xs font-medium text-primary-600">{selectedProductIds.length} selecionado{selectedProductIds.length !== 1 ? 's' : ''}</span>
+                )}
               </div>
-            ))}
+            );
+          })()}
+
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {(productsData?.data ?? []).map((p: Product) => {
+              const alreadyAdded = currentCampaignData?.products?.some((cp) => cp.id === p.id);
+              const isChecked = selectedProductIds.includes(p.id);
+              return (
+                <label
+                  key={p.id}
+                  className={`flex items-center gap-3 p-2.5 border rounded-lg transition-all cursor-pointer ${
+                    alreadyAdded
+                      ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                      : isChecked
+                        ? 'border-primary-400 bg-primary-50'
+                        : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={!!alreadyAdded}
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedProductIds((prev) => [...prev, p.id]);
+                      } else {
+                        setSelectedProductIds((prev) => prev.filter((id) => id !== p.id));
+                      }
+                    }}
+                    className="accent-primary-500 flex-shrink-0"
+                  />
+                  <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
+                    {p.imageUrl ? <img src={p.imageUrl} className="w-10 h-10 rounded object-cover" alt="" /> : <Package size={16} className="text-gray-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${isChecked ? 'text-primary-700' : 'text-gray-800'}`}>{p.title}</p>
+                    <p className="text-xs text-gray-500">R$ {(p.price ?? 0).toFixed(2)}</p>
+                  </div>
+                  {alreadyAdded && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium flex-shrink-0">Já adicionado</span>
+                  )}
+                </label>
+              );
+            })}
           </div>
         </div>
       </Modal>

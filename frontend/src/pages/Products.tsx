@@ -244,9 +244,9 @@ export const Products: React.FC = () => {
                   {/* Active toggle */}
                   <button
                     onClick={() => updateMutation.mutate({ id: p.id, data: { isActive: !p.isActive } })}
-                    className={`absolute top-2 right-2 w-6 h-3.5 rounded-full transition-colors ${p.isActive ? 'bg-green-500' : 'bg-gray-400'}`}
+                    className={`absolute top-2 right-2 inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${p.isActive ? 'bg-green-500' : 'bg-gray-400'}`}
                   >
-                    <span className={`absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full shadow transition-transform ${p.isActive ? 'translate-x-2.5' : 'translate-x-0.5'}`} />
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${p.isActive ? 'translate-x-[18px]' : 'translate-x-1'}`} />
                   </button>
                   {p.category && (
                     <span className="absolute bottom-2 left-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full">
@@ -320,9 +320,12 @@ export const Products: React.FC = () => {
           </div>
           <Select label="Plataforma" options={[{ value: '', label: 'Nenhuma' }, ...platformOptions]} value={form.platformId} onChange={(e) => setForm(f => ({ ...f, platformId: e.target.value }))} />
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setForm(f => ({ ...f, isActive: !f.isActive }))}
-              className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-primary-500' : 'bg-gray-300'}`}>
-              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.isActive ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, isActive: !f.isActive }))}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${form.isActive ? 'bg-primary-500' : 'bg-gray-300'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
             <span className="text-sm text-gray-700">Produto ativo</span>
           </div>

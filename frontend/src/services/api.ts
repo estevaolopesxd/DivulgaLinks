@@ -127,7 +127,8 @@ export const productsApi = {
     return res.data;
   },
   update: async (id: string, data: Partial<Product>) => {
-    const res = await api.put<Product>(`/api/products/${id}`, data);
+    // Backend defines PATCH /:id (not PUT)
+    const res = await api.patch<Product>(`/api/products/${id}`, data);
     return res.data;
   },
   delete: async (id: string) => {
@@ -136,13 +137,13 @@ export const productsApi = {
   importCSV: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await api.post<{ imported: number; errors: string[] }>('/api/products/import-csv', formData, {
+    const res = await api.post<{ imported: number; errors: string[] }>('/api/products/import/csv', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return res.data;
   },
   importFromPlatform: async (platformId: string, query: string) => {
-    const res = await api.post<Product[]>('/api/products/import-platform', { platformId, query });
+    const res = await api.post<Product[]>('/api/products/import/platform', { platformId, query });
     return res.data;
   },
 };
