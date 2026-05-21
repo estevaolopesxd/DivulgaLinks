@@ -115,19 +115,45 @@ services:
       - backend
 
   # ─────────────────────────────────────────────────────────────────────
-  # Adminer — UI web para o banco (http://IP:8888)
+  # Supabase Studio — UI visual para o banco (http://IP:54323)
   # ─────────────────────────────────────────────────────────────────────
-  adminer:
-    image: adminer:latest
-    container_name: divulgalinks-adminer
+  supabase-meta:
+    image: supabase/postgres-meta:v0.96.6
+    container_name: divulgalinks-meta
     restart: unless-stopped
-    ports:
-      - "8888:8080"
     depends_on:
       db:
         condition: service_healthy
     environment:
-      ADMINER_DEFAULT_SERVER: db
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: ${POSTGRES_DB:-divulgalinks}
+      PG_META_DB_USER: ${POSTGRES_USER:-postgres}
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
+
+  supabase-studio:
+    image: supabase/studio:2026.05.18-sha-f45a608
+    container_name: divulgalinks-studio
+    restart: unless-stopped
+    ports:
+      - "54323:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      supabase-meta:
+        condition: service_started
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-divulgalinks123}
+      DEFAULT_ORGANIZATION_NAME: DivulgaLinks
+      DEFAULT_PROJECT_NAME: divulgalinks
+      SUPABASE_URL: http://localhost
+      SUPABASE_PUBLIC_URL: http://localhost
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.dc_X5iR_VP_qroESHHSJJIKCpYqYJByHViw4ih7d_v4
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UtZGVtbyIsImlhdCI6MTY0MTc2OTIwMCwiZXhwIjoxNzk5NTM1NjAwfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+      AUTH_JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
+      NEXT_PUBLIC_ENABLE_LOGS: "false"
 
 # ─────────────────────────────────────────────────────────────────────────
 # Volumes persistentes
