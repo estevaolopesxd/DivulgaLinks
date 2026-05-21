@@ -170,12 +170,12 @@ export const whatsappApi = {
     return res.data;
   },
   getGroups: async (id: string) => {
-    const res = await api.get<WhatsAppGroup[]>(`/api/whatsapp/${id}/groups`);
-    return res.data;
+    const res = await api.get<{ groups: WhatsAppGroup[] }>(`/api/whatsapp/${id}/groups`);
+    return res.data.groups ?? [];
   },
   getChannels: async (id: string) => {
-    const res = await api.get<WhatsAppGroup[]>(`/api/whatsapp/${id}/channels`);
-    return res.data;
+    const res = await api.get<{ channels: WhatsAppGroup[] }>(`/api/whatsapp/${id}/channels`);
+    return res.data.channels ?? [];
   },
   disconnect: async (id: string) => {
     const res = await api.post<{ status: string }>(`/api/whatsapp/${id}/disconnect`);
