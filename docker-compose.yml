@@ -81,6 +81,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-token-with-at-least-32-characters-long}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@divulgalinks.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@1234}
       ADMIN_NAME: ${ADMIN_NAME:-Administrador}

@@ -34,22 +34,28 @@ export const createApp = (): Application => {
   );
 
   // CORS
+  // CORS_ORIGINS aceita lista separada por vírgula ou "*" para liberar tudo
+  const rawOrigins = process.env.CORS_ORIGINS ?? env.FRONTEND_URL;
+  const allowAll = rawOrigins.trim() === '*';
+  const allowedOrigins = allowAll
+    ? []
+    : [
+        ...rawOrigins.split(',').map((o) => o.trim()).filter(Boolean),
+        'http://localhost',
+        'http://localhost:80',
+        'http://localhost:5173',
+        'http://localhost:3000',
+      ];
+
   app.use(
     cors({
       origin: (origin, callback) => {
-        const allowedOrigins = [
-          env.FRONTEND_URL,
-          'http://localhost',
-          'http://localhost:80',
-          'http://localhost:5173',
-          'http://localhost:3000',
-        ];
-
-        if (!origin || allowedOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          callback(new Error(`CORS: origin ${origin} not allowed`));
-        }
+        // sem origin = requisição server-to-server ou curl — sempre ok
+        if (!origin) return callback(null, true);
+        if (allowAll || allowedOrigins.includes(origin)) return callback(null, true);
+        // rejeita sem lançar Error (evita 500)
+        logger.warn(`CORS: origem bloqueada — ${origin}`);
+        callback(null, false);
       },
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
