@@ -74,8 +74,8 @@ export const authApi = {
 
 export const platformsApi = {
   list: async () => {
-    const res = await api.get<Platform[]>('/api/platforms');
-    return res.data;
+    const res = await api.get<{ platforms: Platform[] }>('/api/platforms');
+    return res.data.platforms ?? [];
   },
   get: async (id: string) => {
     const res = await api.get<Platform>(`/api/platforms/${id}`);
@@ -109,8 +109,14 @@ export const productsApi = {
     category?: string;
     isActive?: boolean;
   }) => {
-    const res = await api.get<PaginatedResponse<Product>>('/api/products', { params });
-    return res.data;
+    const res = await api.get<{ products: Product[]; pagination: { page: number; limit: number; total: number; pages: number } }>('/api/products', { params });
+    return {
+      data: res.data.products ?? [],
+      total: res.data.pagination?.total ?? 0,
+      page: res.data.pagination?.page ?? 1,
+      limit: res.data.pagination?.limit ?? 20,
+      totalPages: res.data.pagination?.pages ?? 0,
+    } as PaginatedResponse<Product>;
   },
   get: async (id: string) => {
     const res = await api.get<Product>(`/api/products/${id}`);
@@ -145,8 +151,8 @@ export const productsApi = {
 
 export const whatsappApi = {
   list: async () => {
-    const res = await api.get<WhatsAppAccount[]>('/api/whatsapp');
-    return res.data;
+    const res = await api.get<{ accounts: WhatsAppAccount[] }>('/api/whatsapp');
+    return res.data.accounts ?? [];
   },
   create: async (data: { name: string; phoneNumber: string }) => {
     const res = await api.post<WhatsAppAccount>('/api/whatsapp', data);
@@ -181,8 +187,8 @@ export const whatsappApi = {
 
 export const telegramApi = {
   list: async () => {
-    const res = await api.get<TelegramBot[]>('/api/telegram');
-    return res.data;
+    const res = await api.get<{ bots: TelegramBot[] }>('/api/telegram');
+    return res.data.bots ?? [];
   },
   create: async (data: { name: string; token: string }) => {
     const res = await api.post<TelegramBot>('/api/telegram', data);
@@ -209,8 +215,8 @@ export const telegramApi = {
 
 export const campaignsApi = {
   list: async () => {
-    const res = await api.get<Campaign[]>('/api/campaigns');
-    return res.data;
+    const res = await api.get<{ campaigns: Campaign[] }>('/api/campaigns');
+    return res.data.campaigns ?? [];
   },
   get: async (id: string) => {
     const res = await api.get<Campaign>(`/api/campaigns/${id}`);
@@ -254,9 +260,25 @@ export const campaignsApi = {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export const dashboardApi = {
-  getStats: async () => {
-    const res = await api.get<DashboardStats>('/api/dashboard/stats');
-    return res.data;
+  getStats: async (): Promise<DashboardStats> => {
+    const [statsRes, timelineRes, topRes, msgRes, campRes] = await Promise.all([
+      api.get<{ stats: { totalProducts: number; activeCampaigns: number; messagesToday: number; totalClicks: number } }>('/api/dashboard/stats'),
+      api.get<{ timeline: { date: string; clicks: number }[] }>('/api/dashboard/clicks-timeline'),
+      api.get<{ products: Record<string, unknown>[] }>('/api/dashboard/top-products'),
+      api.get<{ messageStats: { sent: number; failed: number; pending: number } }>('/api/dashboard/message-stats'),
+      api.get<{ campaigns: Record<string, unknown>[] }>('/api/dashboard/campaign-performance'),
+    ]);
+    const st = statsRes.data.stats ?? {};
+    return {
+      totalProducts:       (st as { totalProducts?: number }).totalProducts       ?? 0,
+      activeCampaigns:     (st as { activeCampaigns?: number }).activeCampaigns   ?? 0,
+      messagesToday:       (st as { messagesToday?: number }).messagesToday       ?? 0,
+      totalClicks:         (st as { totalClicks?: number }).totalClicks           ?? 0,
+      clicksTimeline:      timelineRes.data.timeline ?? [],
+      topProducts:         (topRes.data.products ?? []).map((p) => ({ product: p as unknown as Product, clicks: (p.clicks as number) ?? 0 })),
+      messageStats:        msgRes.data.messageStats ?? { sent: 0, failed: 0, pending: 0 },
+      campaignPerformance: (campRes.data.campaigns ?? []).map((c) => ({ campaign: c as unknown as Campaign, sent: (c.sent as number) ?? 0, clicks: (c.clicks as number) ?? 0 })),
+    };
   },
 };
 
@@ -272,8 +294,14 @@ export const logsApi = {
     startDate?: string;
     endDate?: string;
   }) => {
-    const res = await api.get<PaginatedResponse<MessageLog>>('/api/logs/messages', { params });
-    return res.data;
+    const res = await api.get<{ logs: MessageLog[]; pagination: { page: number; limit: number; total: number; pages: number } }>('/api/logs/messages', { params });
+    return {
+      data: res.data.logs ?? [],
+      total: res.data.pagination?.total ?? 0,
+      page: res.data.pagination?.page ?? 1,
+      limit: res.data.pagination?.limit ?? 20,
+      totalPages: res.data.pagination?.pages ?? 0,
+    } as PaginatedResponse<MessageLog>;
   },
   getClickLogs: async (params?: {
     page?: number;
@@ -282,8 +310,14 @@ export const logsApi = {
     startDate?: string;
     endDate?: string;
   }) => {
-    const res = await api.get<PaginatedResponse<ClickLog>>('/api/logs/clicks', { params });
-    return res.data;
+    const res = await api.get<{ logs: ClickLog[]; pagination: { page: number; limit: number; total: number; pages: number } }>('/api/logs/clicks', { params });
+    return {
+      data: res.data.logs ?? [],
+      total: res.data.pagination?.total ?? 0,
+      page: res.data.pagination?.page ?? 1,
+      limit: res.data.pagination?.limit ?? 20,
+      totalPages: res.data.pagination?.pages ?? 0,
+    } as PaginatedResponse<ClickLog>;
   },
 };
 
