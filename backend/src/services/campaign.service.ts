@@ -205,6 +205,17 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
     return;
   }
 
+  if (campaign.products.length === 0) {
+    logger.warn('Campaign: nenhum produto na campanha — dispatch ignorado', { campaignId });
+    await scheduleNextRun(campaignId);
+    return;
+  }
+  if (campaign.destinations.length === 0) {
+    logger.warn('Campaign: nenhum destino ativo na campanha — dispatch ignorado', { campaignId });
+    await scheduleNextRun(campaignId);
+    return;
+  }
+
   logger.info('Campaign: processing dispatch', {
     campaignId,
     products: campaign.products.length,
@@ -260,22 +271,18 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
       if (config) {
         // 1. Check isActive
         if (!config.isActive) {
-          logger.info('Campaign: skipping inactive destination config', {
+          logger.warn('Campaign: destino pulado — DestinationConfig está inativo (verifique Config do Grupo)', {
             campaignId,
             destinationId: destination.destinationId,
+            destinationName: destination.destinationName,
           });
           continue;
         }
 
-        // 2. Check time window
+        // 2. Check time window (usando isWithinTimeWindow para suportar virada de meia-noite)
         if (config.allowedStartTime && config.allowedEndTime) {
-          const now = new Date();
-          const [sh, sm] = config.allowedStartTime.split(':').map(Number);
-          const [eh, em] = config.allowedEndTime.split(':').map(Number);
-          const currentMinutes = now.getHours() * 60 + now.getMinutes();
-          const startMinutes = sh * 60 + sm;
-          const endMinutes = eh * 60 + em;
-          if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
+          const inWindow = isWithinTimeWindow(config.allowedStartTime, config.allowedEndTime, []);
+          if (!inWindow) {
             logger.info('Campaign: skipping destination outside allowed time window', {
               campaignId,
               destinationId: destination.destinationId,
@@ -307,7 +314,6 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
             continue;
           }
         }
-
       }
 
       // ── Product repeat mode check ─────────────────────────────────────────

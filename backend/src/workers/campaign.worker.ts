@@ -97,6 +97,7 @@ const processSingleDispatch = async (
         destination.accountId,
         destination.destinationId,
         message,
+        product.imageUrl ?? undefined,
       );
     } else if (isTelegram) {
       await telegramService.sendMessage(

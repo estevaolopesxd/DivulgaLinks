@@ -76,92 +76,92 @@ const bootstrap = async (): Promise<void> => {
   startWorker();
   logger.info('BullMQ campaign worker started');
 
-  // 7b. Sincronizar fila BullMQ com o estado das campanhas no DB.
-  //     - Remove jobs de campanhas inativas (evita envios indevidos após restart)
-  //     - Recoloca na fila campanhas ATIVAS que perderam seu job (restart sem graceful shutdown)
-  try {
-    const queue = getCampaignQueue();
-
-    // Campanhas com job já na fila
-    const pendingJobs = await queue.getJobs(['waiting', 'delayed', 'active']);
-    const campaignIdsInQueue = new Set<string>();
-
-    let cleaned = 0;
-    for (const job of pendingJobs) {
-      const cid = job.data?.campaignId;
-      if (!cid) continue;
-      const campaign = await prisma.campaign.findUnique({
-        where: { id: cid },
-        select: { isActive: true },
-      });
-      if (!campaign || !campaign.isActive) {
-        // Job de campanha inativa — remover
-        try { await job.remove(); } catch { /* já pode ter sido processado */ }
-        cleaned++;
-        logger.info('Startup: removido job órfão de campanha inativa', { jobId: job.id, campaignId: cid });
-      } else {
-        // Campanha ativa com job na fila — registrar
-        campaignIdsInQueue.add(cid);
-      }
-    }
-    if (cleaned > 0) {
-      logger.info(`Startup: ${cleaned} job(s) órfão(s) removido(s) da fila`);
-    }
-
-    // Campanhas ativas — garantir que há um job IMEDIATO na fila.
-    // Remove qualquer job futuro (delayed) existente e adiciona um imediato,
-    // pois ao reiniciar o servidor o usuário quer que o envio comece logo.
-    const activeCampaigns = await prisma.campaign.findMany({
-      where: { isActive: true },
-      select: { id: true },
-    });
-
-    // Escalonar campanhas com 30s de intervalo entre elas para não sobrecarregar
-    const STARTUP_STAGGER_MS = 30_000; // 30 segundos entre cada campanha
-    let recovered = 0;
-
-    for (const { id } of activeCampaigns) {
-      const delayMs = recovered * STARTUP_STAGGER_MS;
-
-      // Remover jobs delayed existentes para essa campanha (serão substituídos)
-      for (const job of pendingJobs) {
-        if (job.data?.campaignId === id) {
-          try {
-            const state = await job.getState();
-            if (state === 'delayed') await job.remove();
-          } catch { /* ignore */ }
-        }
-      }
-
-      await queue.add('dispatch', { campaignId: id }, {
-        delay: delayMs,
-        jobId: `campaign-${id}-recovery-${Date.now()}`,
-      });
-      recovered++;
-      logger.info('Startup: campanha ativa agendada', {
-        campaignId: id,
-        delayMs,
-        startsIn: `${delayMs / 1000}s`,
-      });
-    }
-    if (recovered > 0) {
-      logger.info(`Startup: ${recovered} campanha(s) escalonadas (intervalo de ${STARTUP_STAGGER_MS / 1000}s entre cada)`);
-    }
-  } catch (err) {
-    logger.warn('Startup: erro ao sincronizar fila de campanhas', { error: err });
-  }
-
-  // 8. Restore active WhatsApp sessions
-  if (env.NODE_ENV === 'production') {
-    restoreSessions().catch((err) =>
-      logger.error('Failed to restore WhatsApp sessions', { error: err }),
-    );
-  }
+  // 8. Restore active WhatsApp sessions (sempre, independente de NODE_ENV)
+  restoreSessions().catch((err) =>
+    logger.error('Failed to restore WhatsApp sessions', { error: err }),
+  );
 
   // 9. Restore active Telegram bots
   telegramService.restoreBots().catch((err) =>
     logger.error('Failed to restore Telegram bots', { error: err }),
   );
+
+  // 10. Sincronizar fila BullMQ — roda 5s após startup para dar tempo do WA reconectar
+  setTimeout(async () => {
+    try {
+      const queue = getCampaignQueue();
+
+      // Mapear estado atual de cada job na fila por campaignId
+      // waiting = vai rodar em breve | active = rodando agora | delayed = agendado pro futuro
+      const allJobs = await queue.getJobs(['waiting', 'delayed', 'active']);
+
+      // Separar por estado para cada campaignId
+      const jobStates = new Map<string, { hasWaitingOrActive: boolean; delayedJobs: typeof allJobs }>();
+      for (const job of allJobs) {
+        const cid = job.data?.campaignId as string | undefined;
+        if (!cid) continue;
+        const state = await job.getState();
+        const entry = jobStates.get(cid) ?? { hasWaitingOrActive: false, delayedJobs: [] };
+        if (state === 'waiting' || state === 'active') {
+          entry.hasWaitingOrActive = true;
+        } else if (state === 'delayed') {
+          entry.delayedJobs.push(job);
+        }
+        jobStates.set(cid, entry);
+      }
+
+      // Buscar campanhas ativas no DB
+      const activeCampaigns = await prisma.campaign.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+
+      // Remover jobs de campanhas INATIVAS que ainda estão na fila
+      for (const [cid, entry] of jobStates.entries()) {
+        const isActive = activeCampaigns.some((c) => c.id === cid);
+        if (!isActive) {
+          for (const job of [...entry.delayedJobs]) {
+            try { await job.remove(); } catch { /* ignore */ }
+          }
+          logger.info('Startup: removidos jobs de campanha inativa', { campaignId: cid });
+        }
+      }
+
+      // Para campanhas ativas: garantir que há um job imediato (escalonado por 30s)
+      const STAGGER_MS = 30_000;
+      let offset = 0;
+      for (const { id } of activeCampaigns) {
+        const state = jobStates.get(id);
+
+        if (state?.hasWaitingOrActive) {
+          // Já tem job imediato/rodando — não interferir
+          logger.info('Startup: campanha já tem job na fila, mantendo', { campaignId: id });
+          continue;
+        }
+
+        // Remover delayed existente (será substituído por um escalonado)
+        if (state?.delayedJobs.length) {
+          for (const job of state.delayedJobs) {
+            try { await job.remove(); } catch { /* ignore */ }
+          }
+        }
+
+        const delayMs = offset * STAGGER_MS;
+        await queue.add('dispatch', { campaignId: id }, {
+          delay: delayMs,
+          jobId: `campaign-${id}-startup-${Date.now()}`,
+        });
+        logger.info('Startup: campanha ativa agendada', { campaignId: id, startsIn: `${delayMs / 1000}s` });
+        offset++;
+      }
+
+      if (offset > 0) {
+        logger.info(`Startup: ${offset} campanha(s) ativa(s) agendada(s) (30s de intervalo entre cada)`);
+      }
+    } catch (err) {
+      logger.warn('Startup: erro ao sincronizar fila de campanhas', { error: err });
+    }
+  }, 5_000);
 
   // 10. Start HTTP server
   server.listen(env.PORT, () => {
