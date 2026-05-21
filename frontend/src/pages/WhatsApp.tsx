@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Smartphone, QrCode, Users, Radio, Wifi, WifiOff, Loader2, Trash2, RefreshCw } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
+import QRCodeSVG from 'react-qr-code';
 import toast from 'react-hot-toast';
 import { whatsappApi } from '../services/api';
 import { Button } from '../components/ui/Button';
@@ -231,8 +232,8 @@ export const WhatsApp: React.FC = () => {
           </div>
 
           {qrCode ? (
-            <div className="border-4 border-gray-200 rounded-xl p-2 bg-white shadow-sm">
-              <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" className="w-56 h-56" />
+            <div className="border-4 border-gray-200 rounded-xl p-4 bg-white shadow-sm">
+              <QRCodeSVG value={qrCode} size={224} level="M" />
             </div>
           ) : (
             <div className="w-56 h-56 border-4 border-gray-200 rounded-xl flex items-center justify-center">
