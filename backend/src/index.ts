@@ -108,24 +108,44 @@ const bootstrap = async (): Promise<void> => {
       logger.info(`Startup: ${cleaned} job(s) órfão(s) removido(s) da fila`);
     }
 
-    // Campanhas ativas que NÃO têm job na fila — reenfileirar imediatamente
+    // Campanhas ativas — garantir que há um job IMEDIATO na fila.
+    // Remove qualquer job futuro (delayed) existente e adiciona um imediato,
+    // pois ao reiniciar o servidor o usuário quer que o envio comece logo.
     const activeCampaigns = await prisma.campaign.findMany({
       where: { isActive: true },
       select: { id: true },
     });
 
+    // Escalonar campanhas com 30s de intervalo entre elas para não sobrecarregar
+    const STARTUP_STAGGER_MS = 30_000; // 30 segundos entre cada campanha
     let recovered = 0;
+
     for (const { id } of activeCampaigns) {
-      if (!campaignIdsInQueue.has(id)) {
-        await queue.add('dispatch', { campaignId: id }, {
-          jobId: `campaign-${id}-recovery-${Date.now()}`,
-        });
-        recovered++;
-        logger.info('Startup: reenfileirada campanha ativa sem job na fila', { campaignId: id });
+      const delayMs = recovered * STARTUP_STAGGER_MS;
+
+      // Remover jobs delayed existentes para essa campanha (serão substituídos)
+      for (const job of pendingJobs) {
+        if (job.data?.campaignId === id) {
+          try {
+            const state = await job.getState();
+            if (state === 'delayed') await job.remove();
+          } catch { /* ignore */ }
+        }
       }
+
+      await queue.add('dispatch', { campaignId: id }, {
+        delay: delayMs,
+        jobId: `campaign-${id}-recovery-${Date.now()}`,
+      });
+      recovered++;
+      logger.info('Startup: campanha ativa agendada', {
+        campaignId: id,
+        delayMs,
+        startsIn: `${delayMs / 1000}s`,
+      });
     }
     if (recovered > 0) {
-      logger.info(`Startup: ${recovered} campanha(s) ativa(s) recuperada(s) na fila`);
+      logger.info(`Startup: ${recovered} campanha(s) escalonadas (intervalo de ${STARTUP_STAGGER_MS / 1000}s entre cada)`);
     }
   } catch (err) {
     logger.warn('Startup: erro ao sincronizar fila de campanhas', { error: err });
