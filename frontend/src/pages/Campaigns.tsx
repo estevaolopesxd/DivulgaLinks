@@ -82,6 +82,7 @@ export const Campaigns: React.FC = () => {
   const [addDestOpen, setAddDestOpen] = useState(false);
   const [destType, setDestType] = useState<CampaignDestination['type'] | ''>('');
   const [destAccount, setDestAccount] = useState('');
+  const [extraAccountIds, setExtraAccountIds] = useState<string[]>([]); // contas adicionais para rotação
   const [selectedDestItems, setSelectedDestItems] = useState<{ id: string; name: string }[]>([]);
   const [destSearch, setDestSearch] = useState('');
 
@@ -186,11 +187,12 @@ export const Campaigns: React.FC = () => {
 
   const addDestMutation = useMutation({
     mutationFn: async ({
-      campaignId, type, accountId, accountType, items,
+      campaignId, type, accountId, accountIds, accountType, items,
     }: {
       campaignId: string;
       type: CampaignDestination['type'];
       accountId: string;
+      accountIds: string[];
       accountType: string;
       items: { id: string; name: string }[];
     }) => {
@@ -201,6 +203,7 @@ export const Campaigns: React.FC = () => {
             destinationId: item.id,
             destinationName: item.name,
             accountId,
+            accountIds,
             accountType,
             isActive: true,
           }),
@@ -298,10 +301,13 @@ export const Campaigns: React.FC = () => {
   const handleAddDest = () => {
     if (!workingCampaign || !destType || !destAccount || selectedDestItems.length === 0) return;
     const accountType = destType.startsWith('WHATSAPP') ? 'WHATSAPP' : 'TELEGRAM';
+    // pool = primary + extras (dedup)
+    const accountIds = Array.from(new Set([destAccount, ...extraAccountIds]));
     addDestMutation.mutate({
       campaignId: workingCampaign.id,
       type: destType as CampaignDestination['type'],
       accountId: destAccount,
+      accountIds,
       accountType,
       items: selectedDestItems,
     });
@@ -329,7 +335,7 @@ export const Campaigns: React.FC = () => {
 
   const clearDestModal = () => {
     setAddDestOpen(false);
-    setDestType(''); setDestAccount(''); setSelectedDestItems([]); setDestSearch('');
+    setDestType(''); setDestAccount(''); setExtraAccountIds([]); setSelectedDestItems([]); setDestSearch('');
   };
 
   if (isLoading) return <PageLoader />;
@@ -662,7 +668,14 @@ export const Campaigns: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800">{d.destinationName}</p>
-                      <p className="text-xs text-gray-500">{DEST_TYPES.find(t => t.value === d.type)?.label ?? d.type}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-gray-500">{DEST_TYPES.find(t => t.value === d.type)?.label ?? d.type}</p>
+                        {d.accountIds && d.accountIds.length > 1 && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                            {d.accountIds.length} números · rotação
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <button onClick={() => removeDestMutation.mutate({ cid: currentCampaignData.id, did: d.id })}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
@@ -746,18 +759,18 @@ export const Campaigns: React.FC = () => {
             }}
           />
 
-          {/* Step 2 – account */}
+          {/* Step 2 – primary account */}
           {destType && (
             destType.startsWith('WHATSAPP') ? (
               <Select
-                label="Conta WhatsApp"
+                label="Conta principal (usada para listar grupos)"
                 required
                 placeholder="Selecione a conta..."
                 value={destAccount}
-                onChange={(e) => { setDestAccount(e.target.value); setSelectedDestItems([]); setDestSearch(''); }}
+                onChange={(e) => { setDestAccount(e.target.value); setExtraAccountIds([]); setSelectedDestItems([]); setDestSearch(''); }}
                 options={(waAccounts as WhatsAppAccount[])
                   .filter((a) => a.status === 'CONNECTED')
-                  .map((a) => ({ value: a.id, label: `${a.name} (${a.phoneNumber})` }))}
+                  .map((a) => ({ value: a.id, label: `${a.name} (${a.phoneNumber ?? '?'})` }))}
               />
             ) : (
               <Select
@@ -765,11 +778,69 @@ export const Campaigns: React.FC = () => {
                 required
                 placeholder="Selecione o bot..."
                 value={destAccount}
-                onChange={(e) => { setDestAccount(e.target.value); setSelectedDestItems([]); setDestSearch(''); }}
+                onChange={(e) => { setDestAccount(e.target.value); setExtraAccountIds([]); setSelectedDestItems([]); setDestSearch(''); }}
                 options={(tgBots as TelegramBot[]).map((b) => ({ value: b.id, label: `${b.name} (@${b.username ?? '?'})` }))}
               />
             )
           )}
+
+          {/* Step 2b – additional accounts for rotation (WhatsApp only) */}
+          {destType?.startsWith('WHATSAPP') && destAccount && (() => {
+            const otherAccounts = (waAccounts as WhatsAppAccount[]).filter(
+              (a) => a.status === 'CONNECTED' && a.id !== destAccount,
+            );
+            if (otherAccounts.length === 0) return null;
+            return (
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+                  Contas adicionais para rotação
+                  <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                </p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Cada mensagem será enviada por um número aleatório do pool — reduz risco de ban.
+                </p>
+                <div className="space-y-1 max-h-36 overflow-y-auto">
+                  {otherAccounts.map((a) => {
+                    const checked = extraAccountIds.includes(a.id);
+                    return (
+                      <label
+                        key={a.id}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all cursor-pointer ${
+                          checked
+                            ? 'border-primary-400 bg-primary-50'
+                            : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setExtraAccountIds((prev) =>
+                              e.target.checked
+                                ? [...prev, a.id]
+                                : prev.filter((id) => id !== a.id),
+                            );
+                          }}
+                          className="accent-primary-500 flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${checked ? 'text-primary-700' : 'text-gray-800'}`}>
+                            {a.name}
+                          </p>
+                          <p className="text-xs text-gray-400">{a.phoneNumber ?? 'sem número'}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                {extraAccountIds.length > 0 && (
+                  <p className="text-xs text-primary-600 font-medium mt-1.5">
+                    Pool de {1 + extraAccountIds.length} número{1 + extraAccountIds.length !== 1 ? 's' : ''} · rotação aleatória ativada
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Step 3 – pick from list */}
           {destType && destAccount && (

@@ -86,6 +86,7 @@ export interface CampaignDestination {
   destinationId: string;
   destinationName: string;
   accountId: string;
+  accountIds: string[]; // pool de contas para rotação aleatória
   accountType: string;
   isActive: boolean;
 }

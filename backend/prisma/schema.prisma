@@ -188,7 +188,8 @@ model CampaignDestination {
   type            DestinationType
   destinationId   String
   destinationName String
-  accountId       String
+  accountId       String          // conta principal (retrocompatibilidade)
+  accountIds      String[]        // pool de contas que podem enviar para este destino
   accountType     String
   isActive        Boolean         @default(true)
 

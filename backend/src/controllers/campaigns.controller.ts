@@ -285,6 +285,8 @@ export const addDestination = async (
       destinationId: z.string().min(1),
       destinationName: z.string().min(1),
       accountId: z.string().min(1),
+      // accountIds: pool de contas para rotação; se vazio, usa só accountId
+      accountIds: z.array(z.string().min(1)).optional().default([]),
       // accountType is optional — derived from type if absent
       accountType: z.string().optional(),
     });
@@ -296,6 +298,9 @@ export const addDestination = async (
       data.accountType ??
       (data.type.startsWith('WHATSAPP') ? 'WHATSAPP' : 'TELEGRAM');
 
+    // accountIds should always include the primary accountId
+    const accountIds = Array.from(new Set([data.accountId, ...data.accountIds]));
+
     const campaign = await prisma.campaign.findUnique({ where: { id } });
     if (!campaign) throw new AppError('Campaign not found', 404);
 
@@ -306,6 +311,7 @@ export const addDestination = async (
         destinationId: data.destinationId,
         destinationName: data.destinationName,
         accountId: data.accountId,
+        accountIds,
         accountType,
         isActive: true,
       },

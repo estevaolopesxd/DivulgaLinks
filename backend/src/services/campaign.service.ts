@@ -424,16 +424,46 @@ export const processCampaignJob = async (campaignId: string): Promise<void> => {
           destination.type === DestinationType.TELEGRAM_GROUP ||
           destination.type === DestinationType.TELEGRAM_CHANNEL;
 
+        // ── Rotação aleatória de contas ────────────────────────────────────
+        // Se o destino tiver múltiplas contas configuradas, escolhe uma
+        // aleatória dentre as que estão conectadas (para WhatsApp) ou
+        // disponíveis (para Telegram). Isso distribui os envios entre
+        // os números cadastrados, reduzindo risco de ban.
+        const accountPool =
+          destination.accountIds && destination.accountIds.length > 0
+            ? destination.accountIds
+            : [destination.accountId];
+
+        let selectedAccountId = destination.accountId; // fallback
+
+        if (isWhatsApp) {
+          const { WhatsAppStatus } = await import('@prisma/client');
+          const connectedAccounts = accountPool.filter(
+            (id) => whatsappService.getClientStatus(id) === WhatsAppStatus.CONNECTED,
+          );
+          const pool = connectedAccounts.length > 0 ? connectedAccounts : accountPool;
+          selectedAccountId = pool[Math.floor(Math.random() * pool.length)];
+        } else if (isTelegram) {
+          selectedAccountId = accountPool[Math.floor(Math.random() * accountPool.length)];
+        }
+
+        logger.info('Campaign: conta selecionada para envio', {
+          campaignId,
+          destinationId: destination.destinationId,
+          selectedAccountId,
+          poolSize: accountPool.length,
+        });
+
         if (isWhatsApp) {
           await whatsappService.sendMessage(
-            destination.accountId,
+            selectedAccountId,
             destination.destinationId,
             message,
             product.imageUrl ?? undefined,
           );
         } else if (isTelegram) {
           await telegramService.sendMessage(
-            destination.accountId,
+            selectedAccountId,
             destination.destinationId,
             message,
             product.imageUrl ?? undefined,
