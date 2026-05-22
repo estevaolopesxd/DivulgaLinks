@@ -253,18 +253,38 @@ export const Platforms: React.FC = () => {
             onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as Platform['type'] }))}
           />
           <Input
-            label="ID de Afiliado"
+            label={form.type === 'MERCADO_LIVRE' ? 'ID de Afiliado (matt_tool)' : 'ID de Afiliado'}
             required
-            placeholder="Ex: meusite-20"
+            placeholder={
+              form.type === 'MERCADO_LIVRE'
+                ? 'Valor matt_tool do painel de Afiliados ML'
+                : form.type === 'AMAZON'
+                ? 'Ex: meusite-20'
+                : 'ID de afiliado da plataforma'
+            }
             value={form.affiliateId}
             onChange={(e) => setForm((f) => ({ ...f, affiliateId: e.target.value }))}
+            hint={
+              form.type === 'MERCADO_LIVRE'
+                ? 'Acesse afiliados.mercadolivre.com.br → Ferramentas → Links de afiliado e copie o valor matt_tool'
+                : undefined
+            }
           />
           <Input
             label="Chave de API (opcional)"
             type="password"
-            placeholder="Chave de API se necessário"
+            placeholder={
+              form.type === 'MERCADO_LIVRE'
+                ? 'Access Token do app ML (se tiver app próprio cadastrado)'
+                : 'Chave de API se necessário'
+            }
             value={form.apiKey}
             onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
+            hint={
+              form.type === 'MERCADO_LIVRE'
+                ? 'Opcional — necessário apenas se você tiver um App registrado no ML Developers'
+                : undefined
+            }
           />
           <div className="flex items-center gap-3">
             <button
