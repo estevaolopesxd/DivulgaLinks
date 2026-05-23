@@ -129,10 +129,9 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: divulgalinks-cloudflared
     restart: unless-stopped
-    # cloudflared lê TUNNEL_TOKEN do ambiente automaticamente (sem precisar de shell)
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+      - TUNNEL_TOKEN   # defina TUNNEL_TOKEN=<seu_token> nas variáveis do Easypanel
     depends_on:
       - frontend
 
