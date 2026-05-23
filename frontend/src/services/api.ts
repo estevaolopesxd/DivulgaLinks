@@ -424,7 +424,12 @@ export const instagramApi = {
     const res = await api.post<{ url: string; filename: string }>('/api/instagram/media/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return res.data;
+    // Se o backend devolveu URL relativa (PUBLIC_URL não configurada),
+    // converte para absoluta usando a origin do browser — garante que o
+    // Instagram Graph API também consiga acessar a imagem.
+    const { url, filename } = res.data;
+    const absoluteUrl = url.startsWith('/') ? `${window.location.origin}${url}` : url;
+    return { url: absoluteUrl, filename };
   },
   createPost: async (data: Partial<InstagramPost>) => {
     const res = await api.post<{ post: InstagramPost }>('/api/instagram/posts', data);

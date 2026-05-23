@@ -205,18 +205,48 @@ const PostModal: React.FC<PostModalProps> = ({ accounts, post, onClose, onSucces
       <div className="space-y-5">
         {/* Account select */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Conta Instagram</label>
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            {accounts.map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                @{acc.username}{acc.pageName ? ` (${acc.pageName})` : ''}
-              </option>
-            ))}
-          </select>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            <User size={13} className="inline mr-1 opacity-60" />
+            Conta Instagram
+          </label>
+          {accounts.length === 1 ? (
+            /* Só 1 conta — exibe como card estático */
+            <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+              {accounts[0].profilePictureUrl ? (
+                <img
+                  src={accounts[0].profilePictureUrl}
+                  alt={accounts[0].username}
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+                  <User size={14} className="text-white" />
+                </div>
+              )}
+              <span className="text-sm font-medium text-gray-800">@{accounts[0].username}</span>
+              {accounts[0].pageName && (
+                <span className="text-xs text-gray-400 ml-auto truncate">{accounts[0].pageName}</span>
+              )}
+            </div>
+          ) : (
+            /* Múltiplas contas — dropdown */
+            <select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  @{acc.username}{acc.pageName ? ` (${acc.pageName})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          {accounts.length === 1 && (
+            <p className="text-xs text-gray-400 mt-1">
+              Para publicar em outras contas, conecte-as na aba <strong>Contas</strong>.
+            </p>
+          )}
         </div>
 
         {/* Media type */}

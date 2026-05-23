@@ -121,8 +121,12 @@ export const uploadMedia = async (
     }
 
     const filename = req.file.filename;
-    const backendUrl = process.env.BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 3001}`;
-    const url = `${backendUrl}/uploads/instagram/${filename}`;
+    // PUBLIC_URL deve apontar para o domínio público da aplicação (ex: https://app.seudominio.com)
+    // assim o Instagram Graph API consegue baixar a imagem, e o browser também via proxy nginx /uploads/
+    const publicUrl = (process.env.PUBLIC_URL ?? '').replace(/\/$/, '');
+    const url = publicUrl
+      ? `${publicUrl}/uploads/instagram/${filename}`
+      : `/uploads/instagram/${filename}`;
 
     logger.info('Instagram media uploaded', { filename });
     res.json({ url, filename });
