@@ -424,9 +424,9 @@ export const instagramApi = {
     const res = await api.post<{ url: string; filename: string }>('/api/instagram/media/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    // Se o backend devolveu URL relativa (PUBLIC_URL não configurada),
-    // converte para absoluta usando a origin do browser — garante que o
-    // Instagram Graph API também consiga acessar a imagem.
+    // Se backend retornou URL relativa (sem PUBLIC_URL), converte para absoluta
+    // usando a origin do browser — funciona para preview e para o Instagram Graph API
+    // desde que o domínio seja acessível publicamente.
     const { url, filename } = res.data;
     const absoluteUrl = url.startsWith('/') ? `${window.location.origin}${url}` : url;
     return { url: absoluteUrl, filename };

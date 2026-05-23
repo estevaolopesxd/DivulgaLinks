@@ -9,6 +9,7 @@ import {
   listAccounts,
   disconnectAccount,
   uploadMedia,
+  serveMediaFile,
   createPost,
   listPosts,
   getPost,
@@ -62,6 +63,9 @@ const upload = multer({
 // ── Router ────────────────────────────────────────────────────────────────────
 
 const router = Router();
+
+// ── Rota pública (sem auth) — necessária para o Instagram Graph API baixar as imagens ──
+router.get('/media/file/:filename', serveMediaFile);
 
 router.use(authMiddleware);
 

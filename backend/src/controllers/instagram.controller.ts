@@ -1,3 +1,4 @@
+import path from 'path';
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { InstagramMediaType } from '@prisma/client';
@@ -121,15 +122,34 @@ export const uploadMedia = async (
     }
 
     const filename = req.file.filename;
-    // PUBLIC_URL deve apontar para o domínio público da aplicação (ex: https://app.seudominio.com)
-    // assim o Instagram Graph API consegue baixar a imagem, e o browser também via proxy nginx /uploads/
+    // Serve o arquivo via rota /api/instagram/media/file/:filename (sem depender de proxy /uploads/)
+    // Se PUBLIC_URL estiver definida, gera URL absoluta (necessária para o Instagram Graph API buscar a imagem)
     const publicUrl = (process.env.PUBLIC_URL ?? '').replace(/\/$/, '');
-    const url = publicUrl
-      ? `${publicUrl}/uploads/instagram/${filename}`
-      : `/uploads/instagram/${filename}`;
+    const apiPath = `/api/instagram/media/file/${filename}`;
+    const url = publicUrl ? `${publicUrl}${apiPath}` : apiPath;
 
     logger.info('Instagram media uploaded', { filename });
     res.json({ url, filename });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Serve arquivos de mídia sem autenticação (necessário para o Instagram Graph API baixar a imagem)
+export const serveMediaFile = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  try {
+    // path.basename previne path traversal (ex: ../../etc/passwd)
+    const safe = path.basename(req.params.filename);
+    const filepath = path.join(process.cwd(), 'uploads', 'instagram', safe);
+    res.sendFile(filepath, (err) => {
+      if (err) {
+        next(new AppError('Arquivo de mídia não encontrado', 404));
+      }
+    });
   } catch (error) {
     next(error);
   }
