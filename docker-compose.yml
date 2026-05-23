@@ -121,6 +121,21 @@ services:
       - backend
 
   # ─────────────────────────────────────────────────────────────────────
+  # Cloudflare Tunnel — expõe o frontend publicamente sem IP público
+  # Configure o token em: https://one.dash.cloudflare.com → Zero Trust → Tunnels
+  # Public hostname: divulgalinks.morphbh.com.br → http://frontend:80
+  # ─────────────────────────────────────────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: divulgalinks-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - frontend
+
+  # ─────────────────────────────────────────────────────────────────────
   # pgAdmin — UI web para gerenciar o banco (http://IP:54323)
   # Login: admin@divulgalinks.com / Admin@1234
   # ─────────────────────────────────────────────────────────────────────
