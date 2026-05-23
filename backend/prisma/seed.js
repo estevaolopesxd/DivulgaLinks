@@ -99,16 +99,13 @@ async function main() {
   const password = process.env.ADMIN_PASSWORD || 'Admin@1234';
   const name     = process.env.ADMIN_NAME     || 'Administrador';
 
-  const exists = await prisma.user.findUnique({ where: { email } });
-  if (!exists) {
-    const hashed = await bcrypt.hash(password, 12);
-    await prisma.user.create({
-      data: { email, password: hashed, name, role: 'ADMIN', isActive: true },
-    });
-    console.log(`[seed] Admin criado: ${email}`);
-  } else {
-    console.log(`[seed] Admin já existe: ${email}`);
-  }
+  const hashed = await bcrypt.hash(password, 12);
+  await prisma.user.upsert({
+    where: { email },
+    update: { password: hashed, isActive: true, role: 'ADMIN' },
+    create: { email, password: hashed, name, role: 'ADMIN', isActive: true },
+  });
+  console.log(`[seed] Admin OK: ${email}`);
 
   // ── Default message templates ───────────────────────────────────────────────
   const existing = await prisma.messageTemplate.count();
