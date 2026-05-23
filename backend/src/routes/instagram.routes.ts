@@ -22,8 +22,13 @@ import {
 // ── Multer setup ──────────────────────────────────────────────────────────────
 
 const uploadDir = path.join(process.cwd(), 'uploads', 'instagram');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (err) {
+  // Diretório pode já existir ou ser criado pelo volume — continua normalmente
+  console.warn('[instagram] Aviso ao criar diretório de uploads:', (err as Error).message);
 }
 
 const storage = multer.diskStorage({

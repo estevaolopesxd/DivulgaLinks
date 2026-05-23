@@ -89,8 +89,8 @@ services:
       INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
       INSTAGRAM_REDIRECT_URI: ${INSTAGRAM_REDIRECT_URI:-http://localhost:7654/instagram/callback}
     volumes:
-      - ./backend/uploads:/app/uploads
-      - ./backend/logs:/app/logs
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
       - whatsapp_sessions:/app/whatsapp_sessions
     ports:
       - "5001:3001"
@@ -143,4 +143,6 @@ volumes:
   db_data:
   redis_data:
   whatsapp_sessions:
+  uploads_data:
+  logs_data:
   pgadmin_data:
