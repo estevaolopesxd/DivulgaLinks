@@ -367,3 +367,11 @@ model InstagramPost {
 
   @@map("instagram_posts")
 }
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}

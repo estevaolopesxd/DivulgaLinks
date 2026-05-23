@@ -19,27 +19,81 @@ export const getInstagramQueue = (): Queue => {
   return _queue;
 };
 
+// ── App credentials (DB first, env fallback) ──────────────────────────────────
+
+const getSetting = async (key: string): Promise<string | null> => {
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key } });
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const setSetting = async (key: string, value: string): Promise<void> => {
+  await prisma.appSetting.upsert({
+    where: { key },
+    update: { value },
+    create: { key, value },
+  });
+};
+
+export const getInstagramCredentials = async (): Promise<{
+  appId: string;
+  appSecret: string;
+  redirectUri: string;
+}> => {
+  const [dbAppId, dbAppSecret, dbRedirectUri] = await Promise.all([
+    getSetting('instagram_app_id'),
+    getSetting('instagram_app_secret'),
+    getSetting('instagram_redirect_uri'),
+  ]);
+  return {
+    appId:       dbAppId       ?? process.env.INSTAGRAM_APP_ID       ?? '',
+    appSecret:   dbAppSecret   ?? process.env.INSTAGRAM_APP_SECRET   ?? '',
+    redirectUri: dbRedirectUri ?? process.env.INSTAGRAM_REDIRECT_URI ?? 'http://localhost:7654/instagram/callback',
+  };
+};
+
+export const getInstagramConfig = async (): Promise<{
+  appId: string;
+  redirectUri: string;
+  configured: boolean;
+}> => {
+  const { appId, redirectUri } = await getInstagramCredentials();
+  return { appId, redirectUri, configured: !!appId };
+};
+
+export const saveInstagramConfig = async (data: {
+  appId: string;
+  appSecret?: string;
+  redirectUri: string;
+}): Promise<void> => {
+  const ops: Promise<void>[] = [
+    setSetting('instagram_app_id', data.appId),
+    setSetting('instagram_redirect_uri', data.redirectUri),
+  ];
+  if (data.appSecret) {
+    ops.push(setSetting('instagram_app_secret', data.appSecret));
+  }
+  await Promise.all(ops);
+  logger.info('Instagram config saved', { appId: data.appId, redirectUri: data.redirectUri });
+};
+
 // ── OAuth helpers ─────────────────────────────────────────────────────────────
 
-export const getAuthUrl = (): string => {
-  const appId = process.env.INSTAGRAM_APP_ID ?? '';
-  const redirectUri = encodeURIComponent(process.env.INSTAGRAM_REDIRECT_URI ?? 'http://localhost:7654/instagram/callback');
+export const getAuthUrl = async (): Promise<string> => {
+  const { appId, redirectUri } = await getInstagramCredentials();
   const scope = 'instagram_basic,instagram_content_publish,pages_show_list,business_management';
-  return `https://www.facebook.com/v20.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
+  return `https://www.facebook.com/v20.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&response_type=code`;
 };
 
 export const exchangeCodeForToken = async (code: string): Promise<string> => {
+  const { appId, appSecret, redirectUri } = await getInstagramCredentials();
   const res = await axios.post<{ access_token: string }>(
     `${GRAPH_BASE}/oauth/access_token`,
     null,
-    {
-      params: {
-        client_id: process.env.INSTAGRAM_APP_ID,
-        client_secret: process.env.INSTAGRAM_APP_SECRET,
-        redirect_uri: process.env.INSTAGRAM_REDIRECT_URI,
-        code,
-      },
-    },
+    { params: { client_id: appId, client_secret: appSecret, redirect_uri: redirectUri, code } },
   );
   return res.data.access_token;
 };
@@ -47,13 +101,14 @@ export const exchangeCodeForToken = async (code: string): Promise<string> => {
 export const getLongLivedToken = async (
   shortToken: string,
 ): Promise<{ accessToken: string; expiresAt: Date }> => {
+  const { appId, appSecret } = await getInstagramCredentials();
   const res = await axios.get<{ access_token: string; expires_in: number }>(
     `${GRAPH_BASE}/oauth/access_token`,
     {
       params: {
         grant_type: 'fb_exchange_token',
-        client_id: process.env.INSTAGRAM_APP_ID,
-        client_secret: process.env.INSTAGRAM_APP_SECRET,
+        client_id: appId,
+        client_secret: appSecret,
         fb_exchange_token: shortToken,
       },
     },

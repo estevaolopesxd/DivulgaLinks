@@ -21,8 +21,43 @@ export const getAuthUrl = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const authUrl = instagramService.getAuthUrl();
+    const authUrl = await instagramService.getAuthUrl();
     res.json({ authUrl });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+export const getConfig = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const config = await instagramService.getInstagramConfig();
+    res.json(config);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const saveConfigSchema = z.object({
+  appId: z.string().min(1, 'App ID é obrigatório'),
+  appSecret: z.string().optional(),
+  redirectUri: z.string().min(1, 'URI de redirecionamento é obrigatória'),
+});
+
+export const saveConfig = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const data = saveConfigSchema.parse(req.body);
+    await instagramService.saveInstagramConfig(data);
+    res.json({ message: 'Configurações salvas com sucesso' });
   } catch (error) {
     next(error);
   }

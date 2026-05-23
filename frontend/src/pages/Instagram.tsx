@@ -17,6 +17,10 @@ import {
   Calendar,
   Clock,
   User,
+  Settings,
+  AlertCircle,
+  CheckCircle2,
+  ExternalLink,
 } from 'lucide-react';
 import { instagramApi } from '../services/api';
 import type { InstagramAccount, InstagramPost, InstagramMediaType, InstagramPostStatus } from '../types';
@@ -359,12 +363,17 @@ export const Instagram: React.FC = () => {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<'contas' | 'publicacoes'>('contas');
+  const [activeTab, setActiveTab] = useState<'configuracoes' | 'contas' | 'publicacoes'>('contas');
   const [showPostModal, setShowPostModal] = useState(false);
   const [editingPost, setEditingPost] = useState<InstagramPost | null>(null);
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [authCode, setAuthCode] = useState('');
+
+  // Config form state
+  const [cfgAppId, setCfgAppId] = useState('');
+  const [cfgAppSecret, setCfgAppSecret] = useState('');
+  const [cfgRedirectUri, setCfgRedirectUri] = useState('http://localhost:7654/instagram/callback');
 
   // Handle OAuth callback code in URL
   useEffect(() => {
@@ -377,6 +386,20 @@ export const Instagram: React.FC = () => {
   }, [searchParams, navigate]);
 
   // Queries
+  const { data: igConfig, refetch: refetchConfig } = useQuery({
+    queryKey: ['instagram-config'],
+    queryFn: instagramApi.getConfig,
+    staleTime: 60_000,
+  });
+
+  // Populate config form when data loads
+  useEffect(() => {
+    if (igConfig) {
+      setCfgAppId(igConfig.appId ?? '');
+      setCfgRedirectUri(igConfig.redirectUri ?? 'http://localhost:7654/instagram/callback');
+    }
+  }, [igConfig]);
+
   const { data: accounts = [], isLoading: loadingAccounts } = useQuery({
     queryKey: ['instagram-accounts'],
     queryFn: instagramApi.listAccounts,
@@ -436,6 +459,27 @@ export const Instagram: React.FC = () => {
     onError: (err: Error) => toast.error(err.message ?? 'Erro ao excluir post'),
   });
 
+  const saveConfigMutation = useMutation({
+    mutationFn: instagramApi.saveConfig,
+    onSuccess: () => {
+      toast.success('Configurações salvas! Agora você pode conectar sua conta.');
+      setCfgAppSecret('');
+      refetchConfig();
+      queryClient.invalidateQueries({ queryKey: ['instagram-auth-url'] });
+    },
+    onError: (err: Error) => toast.error(err.message ?? 'Erro ao salvar configurações'),
+  });
+
+  const handleSaveConfig = () => {
+    if (!cfgAppId.trim()) { toast.error('App ID é obrigatório'); return; }
+    if (!cfgRedirectUri.trim()) { toast.error('URI de redirecionamento é obrigatória'); return; }
+    saveConfigMutation.mutate({
+      appId: cfgAppId.trim(),
+      appSecret: cfgAppSecret.trim() || undefined,
+      redirectUri: cfgRedirectUri.trim(),
+    });
+  };
+
   const handleConnect = () => {
     if (!authCode.trim()) { toast.error('Cole o código de autorização'); return; }
     connectMutation.mutate(authCode.trim());
@@ -493,39 +537,188 @@ export const Instagram: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-6">
-        {(['contas', 'publicacoes'] as const).map((tab) => (
+        {(
+          [
+            { key: 'configuracoes', label: 'Configurações', icon: <Settings size={14} /> },
+            { key: 'contas',        label: 'Contas',        icon: <User size={14} /> },
+            { key: 'publicacoes',   label: 'Publicações',   icon: <Image size={14} /> },
+          ] as const
+        ).map(({ key, label, icon }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
-              activeTab === tab
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === key
                 ? 'border-primary-500 text-primary-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {tab === 'contas' ? 'Contas' : 'Publicações'}
+            {icon}
+            {label}
+            {key === 'configuracoes' && igConfig && !igConfig.configured && (
+              <span className="ml-1 w-2 h-2 rounded-full bg-orange-400 inline-block" />
+            )}
           </button>
         ))}
       </div>
 
+      {/* ── Tab: Configurações ── */}
+      {activeTab === 'configuracoes' && (
+        <div className="space-y-6 max-w-2xl">
+          {/* Status banner */}
+          {igConfig?.configured ? (
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+              <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
+              <p className="text-sm text-green-800 font-medium">
+                App Meta configurado. Você pode conectar contas na aba <strong>Contas</strong>.
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+              <AlertCircle size={18} className="text-orange-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-orange-800">
+                Configure o App Meta abaixo para habilitar o login com Instagram.
+              </p>
+            </div>
+          )}
+
+          {/* Instructions */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <Settings size={16} />
+              Como criar o App Meta (uma vez só)
+            </h2>
+            <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
+              <li>
+                Acesse{' '}
+                <a
+                  href="https://developers.facebook.com/apps"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary-600 underline inline-flex items-center gap-0.5"
+                >
+                  developers.facebook.com/apps <ExternalLink size={11} />
+                </a>{' '}
+                e clique em <strong>Criar aplicativo</strong>
+              </li>
+              <li>Escolha o tipo <strong>Empresa</strong> e avance</li>
+              <li>
+                No painel do app, vá em <strong>Adicionar produto</strong> e adicione{' '}
+                <strong>Instagram Graph API</strong>
+              </li>
+              <li>
+                Em <strong>Configurações → Básico</strong> copie o{' '}
+                <strong>ID do Aplicativo</strong> e o <strong>Chave secreta</strong>
+              </li>
+              <li>
+                Em <strong>Instagram → Configurações da API</strong>, adicione a URI de
+                redirecionamento exatamente como configurada abaixo
+              </li>
+            </ol>
+          </div>
+
+          {/* Config form */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+            <h2 className="text-base font-semibold text-gray-900">Credenciais do App Meta</h2>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                App ID <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={cfgAppId}
+                onChange={(e) => setCfgAppId(e.target.value)}
+                placeholder="Ex: 1234567890123456"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                App Secret{' '}
+                {igConfig?.configured && (
+                  <span className="text-gray-400 font-normal text-xs">(deixe em branco para manter o atual)</span>
+                )}
+              </label>
+              <Input
+                type="password"
+                value={cfgAppSecret}
+                onChange={(e) => setCfgAppSecret(e.target.value)}
+                placeholder={igConfig?.configured ? '••••••••••••••••' : 'Cole o App Secret aqui'}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                URI de Redirecionamento OAuth <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={cfgRedirectUri}
+                onChange={(e) => setCfgRedirectUri(e.target.value)}
+                placeholder="https://seusite.com/instagram/callback"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Copie esta URL e cadastre exatamente assim no painel do App Meta →
+                Instagram → Configurações da API → URIs de redirecionamento.
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <Button
+                variant="primary"
+                onClick={handleSaveConfig}
+                loading={saveConfigMutation.isPending}
+                icon={<CheckCircle2 size={15} />}
+              >
+                Salvar Configurações
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Tab: Contas ── */}
       {activeTab === 'contas' && (
         <div className="space-y-6">
+          {/* Warning if not configured */}
+          {igConfig && !igConfig.configured && (
+            <div className="flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+              <AlertCircle size={18} className="text-orange-500 flex-shrink-0" />
+              <p className="text-sm text-orange-800">
+                Configure o App Meta na aba{' '}
+                <button
+                  className="underline font-semibold"
+                  onClick={() => setActiveTab('configuracoes')}
+                >
+                  Configurações
+                </button>{' '}
+                antes de conectar uma conta.
+              </p>
+            </div>
+          )}
+
           {/* Connect section */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Conectar conta Instagram</h2>
+            <h2 className="text-base font-semibold text-gray-900 mb-2">Conectar conta Instagram</h2>
             <p className="text-sm text-gray-600 mb-4">
               Clique no botão abaixo para autorizar acesso à sua conta Instagram Business via Facebook.
-              Após autorizar, você será redirecionado de volta automaticamente.
+              Após autorizar, você será redirecionado de volta automaticamente.{' '}
+              <strong>Repita o processo para cada conta adicional.</strong>
             </p>
             <Button
               variant="primary"
               icon={<InstagramIcon size={16} />}
               onClick={handleAuthRedirect}
               className="mb-4"
+              disabled={!igConfig?.configured}
             >
               Conectar com Instagram
             </Button>
+
+            {!igConfig?.configured && (
+              <p className="text-xs text-gray-400 mb-4">
+                Configure o App Meta na aba Configurações para habilitar este botão.
+              </p>
+            )}
 
             <div className="border-t border-gray-100 pt-4 mt-2">
               <p className="text-xs text-gray-500 mb-2">

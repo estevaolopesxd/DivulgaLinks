@@ -395,6 +395,14 @@ export const templatesApi = {
 // ─── Instagram API ────────────────────────────────────────────────────────────
 
 export const instagramApi = {
+  getConfig: async () => {
+    const res = await api.get<{ appId: string; redirectUri: string; configured: boolean }>('/api/instagram/config');
+    return res.data;
+  },
+  saveConfig: async (data: { appId: string; appSecret?: string; redirectUri: string }) => {
+    const res = await api.put<{ message: string }>('/api/instagram/config', data);
+    return res.data;
+  },
   getAuthUrl: async () => {
     const res = await api.get<{ authUrl: string }>('/api/instagram/auth/url');
     return res.data;

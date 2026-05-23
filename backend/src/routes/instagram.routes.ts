@@ -15,6 +15,8 @@ import {
   updatePost,
   deletePost,
   publishPostNow,
+  getConfig,
+  saveConfig,
 } from '../controllers/instagram.controller';
 
 // ── Multer setup ──────────────────────────────────────────────────────────────
@@ -57,6 +59,10 @@ const upload = multer({
 const router = Router();
 
 router.use(authMiddleware);
+
+// Config (App ID / Secret stored in DB)
+router.get('/config', getConfig);
+router.put('/config', saveConfig);
 
 // Auth
 router.get('/auth/url', getAuthUrl);
