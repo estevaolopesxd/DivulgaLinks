@@ -13,6 +13,8 @@ import Users from './pages/Users';
 import Metrics from './pages/Metrics';
 import GroupConfig from './pages/GroupConfig';
 import { Templates } from './pages/Templates';
+import { Instagram } from './pages/Instagram';
+import InstagramCallback from './pages/InstagramCallback';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
@@ -49,6 +51,8 @@ function App() {
         <Route path="templates" element={<Templates />} />
         <Route path="users" element={<Users />} />
         <Route path="logs" element={<Logs />} />
+        <Route path="instagram" element={<Instagram />} />
+        <Route path="instagram/callback" element={<InstagramCallback />} />
       </Route>
 
       {/* Catch-all */}

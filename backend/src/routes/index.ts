@@ -12,6 +12,7 @@ import metricsRoutes from './metrics.routes';
 import groupConfigRoutes from './group-config.routes';
 import trackingRoutes from './tracking.routes';
 import templatesRoutes from './templates.routes';
+import instagramRoutes from './instagram.routes';
 
 const router = Router();
 
@@ -39,5 +40,6 @@ router.use('/users', usersRoutes);
 router.use('/metrics', metricsRoutes);
 router.use('/group-config', groupConfigRoutes);
 router.use('/templates', templatesRoutes);
+router.use('/instagram', instagramRoutes);
 
 export default router;

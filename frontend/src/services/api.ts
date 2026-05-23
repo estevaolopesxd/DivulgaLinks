@@ -23,6 +23,8 @@ import type {
   MetricsSummary,
   TopProduct,
   MessageTemplate,
+  InstagramAccount,
+  InstagramPost,
 } from '../types';
 
 const api = axios.create({
@@ -388,6 +390,53 @@ export const templatesApi = {
   update: (id: string, data: Partial<{ name: string; content: string; isActive: boolean }>) =>
     api.patch<{ template: MessageTemplate }>(`/api/templates/${id}`, data).then(r => r.data.template),
   delete: (id: string) => api.delete(`/api/templates/${id}`),
+};
+
+// ─── Instagram API ────────────────────────────────────────────────────────────
+
+export const instagramApi = {
+  getAuthUrl: async () => {
+    const res = await api.get<{ authUrl: string }>('/api/instagram/auth/url');
+    return res.data;
+  },
+  connect: async (code: string) => {
+    const res = await api.post<{ account: InstagramAccount }>('/api/instagram/auth/callback', { code });
+    return res.data.account;
+  },
+  listAccounts: async () => {
+    const res = await api.get<{ accounts: InstagramAccount[] }>('/api/instagram/accounts');
+    return res.data.accounts;
+  },
+  disconnect: async (id: string) => {
+    await api.delete(`/api/instagram/accounts/${id}`);
+  },
+  uploadMedia: async (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await api.post<{ url: string; filename: string }>('/api/instagram/media/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  createPost: async (data: Partial<InstagramPost>) => {
+    const res = await api.post<{ post: InstagramPost }>('/api/instagram/posts', data);
+    return res.data.post;
+  },
+  listPosts: async (params?: { accountId?: string; status?: string; page?: number; limit?: number }) => {
+    const res = await api.get<{ posts: InstagramPost[]; total: number }>('/api/instagram/posts', { params });
+    return res.data;
+  },
+  updatePost: async (id: string, data: Partial<InstagramPost>) => {
+    const res = await api.patch<{ post: InstagramPost }>(`/api/instagram/posts/${id}`, data);
+    return res.data.post;
+  },
+  deletePost: async (id: string) => {
+    await api.delete(`/api/instagram/posts/${id}`);
+  },
+  publishPost: async (id: string) => {
+    const res = await api.post<{ post: InstagramPost }>(`/api/instagram/posts/${id}/publish`);
+    return res.data.post;
+  },
 };
 
 export default api;

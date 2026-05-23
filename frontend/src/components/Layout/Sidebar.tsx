@@ -15,6 +15,7 @@ import {
   Settings2,
   Users,
   FileEdit,
+  Instagram,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../../hooks/useAuth';
@@ -25,6 +26,7 @@ const navItems = [
   { to: '/products', label: 'Produtos', icon: Package },
   { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { to: '/telegram', label: 'Telegram', icon: Send },
+  { to: '/instagram', label: 'Instagram', icon: Instagram },
   { to: '/campaigns', label: 'Campanhas', icon: Megaphone },
   { to: '/templates', label: 'Templates', icon: FileEdit },
   { to: '/metrics', label: 'Métricas', icon: BarChart2 },

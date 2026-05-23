@@ -251,3 +251,36 @@ export interface MessageTemplate {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface InstagramAccount {
+  id: string;
+  instagramUserId: string;
+  username: string;
+  profilePictureUrl?: string;
+  pageId?: string;
+  pageName?: string;
+  isActive: boolean;
+  tokenExpiresAt?: string;
+  createdAt: string;
+}
+
+export type InstagramMediaType = 'IMAGE' | 'REEL' | 'CAROUSEL' | 'STORY';
+export type InstagramPostStatus = 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
+
+export interface InstagramPost {
+  id: string;
+  accountId: string;
+  account?: InstagramAccount;
+  mediaType: InstagramMediaType;
+  mediaUrls: string[];
+  caption?: string;
+  hashtags?: string;
+  status: InstagramPostStatus;
+  scheduledAt?: string;
+  publishedAt?: string;
+  igMediaId?: string;
+  failedReason?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}

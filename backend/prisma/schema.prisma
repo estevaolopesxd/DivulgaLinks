@@ -313,3 +313,57 @@ model DestinationDailyStats {
   @@unique([destinationConfigId, date])
   @@map("destination_daily_stats")
 }
+
+enum InstagramPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum InstagramMediaType {
+  IMAGE
+  REEL
+  CAROUSEL
+  STORY
+}
+
+model InstagramAccount {
+  id                String    @id @default(uuid())
+  instagramUserId   String    @unique
+  username          String
+  accessToken       String
+  tokenExpiresAt    DateTime?
+  profilePictureUrl String?
+  pageId            String?
+  pageName          String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  posts InstagramPost[]
+
+  @@map("instagram_accounts")
+}
+
+model InstagramPost {
+  id           String              @id @default(uuid())
+  accountId    String
+  mediaType    InstagramMediaType  @default(IMAGE)
+  mediaUrls    String[]
+  caption      String?
+  hashtags     String?
+  status       InstagramPostStatus @default(DRAFT)
+  scheduledAt  DateTime?
+  publishedAt  DateTime?
+  igMediaId    String?
+  failedReason String?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  account InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("instagram_posts")
+}

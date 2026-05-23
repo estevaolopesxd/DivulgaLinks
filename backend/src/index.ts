@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import fs from 'fs';
+import path from 'path';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { env } from './config/env';
@@ -10,6 +12,7 @@ import { setSocketIO, restoreSessions } from './services/whatsapp.service';
 import telegramService from './services/telegram.service';
 import { startWorker, stopWorker } from './workers/campaign.worker';
 import { getCampaignQueue } from './services/campaign.service';
+import { startInstagramWorker, stopInstagramWorker } from './workers/instagram.worker';
 
 const bootstrap = async (): Promise<void> => {
   // 1. Connect to Redis
@@ -75,6 +78,16 @@ const bootstrap = async (): Promise<void> => {
   // 7. Start BullMQ campaign worker
   startWorker();
   logger.info('BullMQ campaign worker started');
+
+  // 7b. Start BullMQ Instagram worker
+  startInstagramWorker();
+  logger.info('BullMQ Instagram worker started');
+
+  // Ensure uploads/instagram directory exists
+  const instagramUploadsDir = path.join(process.cwd(), 'uploads', 'instagram');
+  if (!fs.existsSync(instagramUploadsDir)) {
+    fs.mkdirSync(instagramUploadsDir, { recursive: true });
+  }
 
   // 8. Restore active WhatsApp sessions (sempre, independente de NODE_ENV)
   restoreSessions().catch((err) =>
@@ -182,6 +195,7 @@ const bootstrap = async (): Promise<void> => {
       logger.info('HTTP server closed');
 
       await stopWorker();
+      await stopInstagramWorker();
       await prisma.$disconnect();
       logger.info('Database disconnected');
 
