@@ -129,8 +129,8 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: divulgalinks-cloudflared
     restart: unless-stopped
-    # sh -c garante que $TUNNEL_TOKEN é resolvido pelo shell do container (não pelo docker-compose)
-    entrypoint: ["sh", "-c", "cloudflared tunnel --no-autoupdate run --token $TUNNEL_TOKEN"]
+    # cloudflared lê TUNNEL_TOKEN do ambiente automaticamente (sem precisar de shell)
+    command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
