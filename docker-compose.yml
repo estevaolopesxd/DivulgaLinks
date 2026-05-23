@@ -129,8 +129,10 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: divulgalinks-cloudflared
     restart: unless-stopped
-    # O token é interpolado pelo docker-compose a partir da variável CLOUDFLARE_TUNNEL_TOKEN
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    # sh -c garante que $TUNNEL_TOKEN é resolvido pelo shell do container (não pelo docker-compose)
+    entrypoint: ["sh", "-c", "cloudflared tunnel --no-autoupdate run --token $TUNNEL_TOKEN"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       - frontend
 
