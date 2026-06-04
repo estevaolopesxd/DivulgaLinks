@@ -63,7 +63,6 @@ export const Products: React.FC = () => {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [importQuery, setImportQuery] = useState('');
   const [importPlatform, setImportPlatform] = useState('');
-  const [importResults, setImportResults] = useState<Product[]>([]);
   const [previewProducts, setPreviewProducts] = useState<PreviewProduct[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importSort, setImportSort] = useState<'sales' | 'commission' | 'price'>('sales');
@@ -110,12 +109,6 @@ export const Products: React.FC = () => {
     mutationFn: (file: File) => productsApi.importCSV(file),
     onSuccess: (data) => { toast.success(`${data.imported} produtos importados!`); queryClient.invalidateQueries({ queryKey: ['products'] }); setCsvModalOpen(false); setCsvFile(null); },
     onError: () => toast.error('Erro ao importar CSV.'),
-  });
-
-  const importPlatformMutation = useMutation({
-    mutationFn: ({ platformId, query }: { platformId: string; query: string }) => productsApi.importFromPlatform(platformId, query),
-    onSuccess: (data) => setImportResults(data),
-    onError: () => toast.error('Erro ao buscar produtos.'),
   });
 
   const searchPlatformMutation = useMutation({
