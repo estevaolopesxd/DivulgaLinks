@@ -53,6 +53,7 @@ export class MercadoLivreAffiliateService extends BaseAffiliateService {
   private readonly apiBase = 'https://api.mercadolibre.com';
   private readonly siteId = 'MLB'; // Brasil
   private http: AxiosInstance;
+  private accessToken: string | null = null;
 
   constructor(affiliateId: string, apiKey?: string, apiSecret?: string) {
     super(affiliateId, apiKey, apiSecret);
@@ -61,14 +62,38 @@ export class MercadoLivreAffiliateService extends BaseAffiliateService {
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
         'Accept-Language': 'pt-BR,pt;q=0.9',
-        'Referer': 'https://www.mercadolivre.com.br/',
-        'Origin': 'https://www.mercadolivre.com.br',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
     });
+  }
+
+  /**
+   * Obtém access token via client_credentials (APP_ID + CLIENT_SECRET).
+   * Cacheado na instância — se já tiver token, reutiliza.
+   */
+  private async getAccessToken(): Promise<string | null> {
+    if (this.accessToken) return this.accessToken;
+    if (!this.apiKey || !this.apiSecret) return null;
+
+    try {
+      const res = await axios.post<{ access_token: string }>(
+        'https://api.mercadolibre.com/oauth/token',
+        new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: this.apiKey,
+          client_secret: this.apiSecret,
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 },
+      );
+      this.accessToken = res.data.access_token;
+      logger.info('MercadoLivre: access token obtido via client_credentials');
+      return this.accessToken;
+    } catch (err) {
+      logger.warn('MercadoLivre: falha ao obter access token', { error: (err as Error).message });
+      return null;
+    }
   }
 
   /**
@@ -125,7 +150,14 @@ export class MercadoLivreAffiliateService extends BaseAffiliateService {
     try {
       logger.info('MercadoLivre: searching products', { query, limit, offset });
 
-      const searchRes = await this.http.get<MLSearchResponse>('/sites/MLB/search', { params });
+      // Injeta access token se disponível
+      const token = await this.getAccessToken();
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const searchRes = await this.http.get<MLSearchResponse>('/sites/MLB/search', {
+        params,
+        headers: authHeaders,
+      });
       const results = searchRes.data.results;
 
       if (results.length === 0) return [];
@@ -148,7 +180,9 @@ export class MercadoLivreAffiliateService extends BaseAffiliateService {
     try {
       logger.info('MercadoLivre: getting product', { externalId });
 
-      const response = await this.http.get<MLItemDetail>(`/items/${externalId}`);
+      const token = await this.getAccessToken();
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await this.http.get<MLItemDetail>(`/items/${externalId}`, { headers: authHeaders });
       return this.mapProduct(response.data);
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 404) {
