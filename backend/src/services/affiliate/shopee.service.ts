@@ -120,50 +120,74 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
   }
 
   private async publicSearch(query: string, limit: number): Promise<AffiliateProduct[]> {
-    // Fallback using Shopee public search endpoint
-    try {
-      const response = await axios.get('https://shopee.com.br/api/v4/search/search_items', {
+    const endpoints = [
+      // Endpoint v4 com parâmetros completos
+      {
+        url: 'https://shopee.com.br/api/v4/search/search_items',
         params: {
-          by: 'relevancy',
-          keyword: query,
-          limit,
-          newest: 0,
-          order: 'desc',
-          page_type: 'search',
-          scenario: 'PAGE_GLOBAL_SEARCH',
-          version: 2,
+          by: 'relevancy', keyword: query, limit, newest: 0,
+          order: 'desc', page_type: 'search',
+          scenario: 'PAGE_GLOBAL_SEARCH', version: 2, shopv: 2,
         },
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          Referer: 'https://shopee.com.br/',
-          'X-API-SOURCE': 'pc',
+      },
+      // Endpoint alternativo usado pelo app mobile
+      {
+        url: 'https://shopee.com.br/api/v4/search/search_items',
+        params: {
+          by: 'relevancy', keyword: query, limit, newest: 0,
+          order: 'desc', page_type: 'search', version: 2,
         },
-        timeout: 10000,
-      });
+      },
+    ];
 
-      const items = response.data?.items ?? [];
-      return items.slice(0, limit).map((item: any) => {
-        const shopId = item.shopid;
-        const itemId = item.itemid;
-        const productUrl = `https://shopee.com.br/product/${shopId}/${itemId}`;
-        return {
-          externalId: `${shopId}_${itemId}`,
-          title: item.name,
-          price: (item.price ?? 0) / 100000,
-          originalPrice: item.price_before_discount
-            ? item.price_before_discount / 100000
-            : undefined,
-          imageUrl: item.image
-            ? `https://cf.shopee.com.br/file/${item.image}`
-            : undefined,
-          affiliateUrl: this.buildAffiliateUrl(productUrl),
-          platformData: { shopId, itemId },
-        };
-      });
-    } catch (error) {
-      logger.error('Shopee: public search failed', { error });
-      return [];
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
+      'Accept-Language': 'pt-BR,pt;q=0.9',
+      'Referer': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
+      'X-API-SOURCE': 'pc',
+      'X-Shopee-Language': 'pt-BR',
+      'if-none-match-': '',
+    };
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await axios.get(endpoint.url, {
+          params: endpoint.params,
+          headers,
+          timeout: 12000,
+        });
+
+        const items = response.data?.items ?? [];
+        if (items.length === 0) continue;
+
+        logger.info('Shopee: public search success', { query, count: items.length });
+
+        return items.slice(0, limit).map((item: any) => {
+          const data = item.item_basic ?? item;
+          const shopId = data.shopid ?? item.shopid;
+          const itemId = data.itemid ?? item.itemid;
+          const productUrl = `https://shopee.com.br/product/${shopId}/${itemId}`;
+          const image = data.image ?? item.image;
+          const price = data.price ?? item.price ?? 0;
+          const priceBefore = data.price_before_discount ?? item.price_before_discount;
+          return {
+            externalId: `${shopId}_${itemId}`,
+            title: data.name ?? item.name,
+            price: price / 100000,
+            originalPrice: priceBefore ? priceBefore / 100000 : undefined,
+            imageUrl: image ? `https://cf.shopee.com.br/file/${image}` : undefined,
+            affiliateUrl: this.buildAffiliateUrl(productUrl),
+            platformData: { shopId, itemId },
+          };
+        });
+      } catch (error) {
+        logger.warn('Shopee: endpoint failed, trying next', { url: endpoint.url, error: (error as Error).message });
+      }
     }
+
+    logger.error('Shopee: all public search endpoints failed', { query });
+    throw new Error('Shopee: não foi possível buscar produtos. Configure o App ID e Secret da API Oficial da Shopee Affiliates em Plataformas para habilitar a busca.');
   }
 
   async getProduct(externalId: string): Promise<AffiliateProduct | null> {

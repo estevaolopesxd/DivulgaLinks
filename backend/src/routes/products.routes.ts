@@ -8,6 +8,7 @@ import {
   deleteProduct,
   importCSV,
   importFromPlatform,
+  importFromUrl,
   generateTrackingUrl,
 } from '../controllers/products.controller';
 import { authMiddleware } from '../middleware/auth';
@@ -55,6 +56,9 @@ router.post('/import/csv', upload.single('file'), importCSV);
 
 // POST /api/products/import/platform
 router.post('/import/platform', importFromPlatform);
+
+// POST /api/products/import/url
+router.post('/import/url', importFromUrl);
 
 // POST /api/products/:id/tracking-url
 router.post('/:id/tracking-url', generateTrackingUrl);

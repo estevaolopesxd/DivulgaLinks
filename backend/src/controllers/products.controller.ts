@@ -257,6 +257,69 @@ const getAffiliateService = (
   }
 };
 
+export const importFromUrl = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const schema = z.object({
+      platformId: z.string().uuid(),
+      url: z.string().url(),
+    });
+    const { platformId, url } = schema.parse(req.body);
+
+    const platform = await prisma.platform.findUnique({ where: { id: platformId } });
+    if (!platform) throw new AppError('Plataforma não encontrada', 404);
+    if (!platform.isActive) throw new AppError('Plataforma inativa', 400);
+
+    const service = getAffiliateService(platform.type, platform.affiliateId, platform.apiKey, platform.apiSecret);
+
+    // Extrai IDs do produto a partir da URL
+    const ids = (service as any).extractProductIds?.(url);
+    if (!ids) throw new AppError('URL inválida ou formato não reconhecido para esta plataforma', 400);
+
+    const externalId = `${ids.shopId}_${ids.itemId}`;
+    const product = await service.getProduct(externalId);
+    if (!product) throw new AppError('Produto não encontrado ou indisponível', 404);
+
+    // Verifica se já existe produto com mesmo externalId nessa plataforma
+    const existing = await prisma.product.findFirst({ where: { externalId, platformId } });
+
+    const saved = existing
+      ? await prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            title: product.title,
+            price: product.price,
+            originalPrice: product.originalPrice ?? null,
+            imageUrl: product.imageUrl ?? null,
+            affiliateUrl: product.affiliateUrl,
+            isActive: true,
+          },
+        })
+      : await prisma.product.create({
+          data: {
+            title: product.title,
+            description: product.description ?? null,
+            price: product.price,
+            originalPrice: product.originalPrice ?? null,
+            imageUrl: product.imageUrl ?? null,
+            affiliateUrl: product.affiliateUrl,
+            platformId,
+            externalId,
+            category: product.category ?? null,
+            tags: product.tags ?? [],
+            isActive: true,
+          },
+        });
+
+    res.status(201).json({ message: 'Produto importado com sucesso', product: saved });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const importFromPlatform = async (
   req: Request,
   res: Response,
@@ -296,7 +359,7 @@ export const importFromPlatform = async (
     });
 
     if (affiliateProducts.length === 0) {
-      res.json({ message: 'No products found', products: [] });
+      res.json({ message: 'Nenhum produto encontrado para essa busca.', products: [] });
       return;
     }
 
