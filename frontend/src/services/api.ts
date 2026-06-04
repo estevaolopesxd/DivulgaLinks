@@ -89,7 +89,7 @@ export const platformsApi = {
     return res.data;
   },
   update: async (id: string, data: Partial<Platform & { displayName?: string; isDefault?: boolean }>) => {
-    const res = await api.put<Platform>(`/api/platforms/${id}`, data);
+    const res = await api.patch<Platform>(`/api/platforms/${id}`, data);
     return res.data;
   },
   delete: async (id: string) => {
