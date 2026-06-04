@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { createHmac } from 'crypto';
+import { createHash } from 'crypto';
 import { BaseAffiliateService, AffiliateProduct, SearchOptions } from './base';
 import { logger } from '../../utils/logger';
 
@@ -58,10 +58,6 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
    * Formato: SHA256 Hmac appid={appId},timestamp={ts},sign={hmac}
    * Assinatura: HMAC-SHA256(appSecret, appId + timestamp + "/graphql" + body)
    */
-  private buildSign(message: string): string {
-    return createHmac('sha256', this.apiKey ?? '').update(message).digest('hex');
-  }
-
   async searchProducts(options: SearchOptions): Promise<AffiliateProduct[]> {
     const { query, limit = 10 } = options;
     logger.info('Shopee: searching products', { query, limit });
@@ -72,78 +68,51 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
     }
 
     const appId = this.affiliateId ?? '';
-    const gqlQuery = `query SearchProducts($keyword: String!, $limit: Int!) { productOfferV2(listType: 0, sortType: 2, keyword: $keyword, limit: $limit) { nodes { itemId shopId productName commissionRate priceMin priceMax imageLink productLink shopName sales } } }`;
-    const body = JSON.stringify({ query: gqlQuery, variables: { keyword: query, limit } });
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-
     const secret = this.apiKey ?? '';
+    const gqlQuery = `query SearchProducts($keyword: String!, $limit: Int!) { productOfferV2(listType: 0, sortType: 2, keyword: $keyword, limit: $limit) { nodes { itemId shopId productName commissionRate priceMin priceMax imageLink productLink shopName sales } } }`;
 
-    // Tenta múltiplos formatos — HMAC e token direto
-    const variants = [
-      // ── Token direto (Senha = access token) ───────────────────────────────
-      // Formato 5: Bearer simples
-      { auth: `Bearer ${secret}`, extra: {} },
-      // Formato 6: só a chave
-      { auth: secret, extra: {} },
-      // Formato 7: appId:secret (Basic-like)
-      { auth: `${appId}:${secret}`, extra: {} },
-      // ── HMAC (Senha = segredo de assinatura) ──────────────────────────────
-      // Formato 1: appId + timestamp + path + body
-      { auth: `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(appId + timestamp + '/graphql' + body)}`, extra: {} },
-      // Formato 2: timestamp + appId + path + body
-      { auth: `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(timestamp + appId + '/graphql' + body)}`, extra: {} },
-      // Formato 3: sem path
-      { auth: `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(appId + timestamp + body)}`, extra: {} },
-      // Formato 4: com pontos
-      { auth: `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(`${appId}.${timestamp}./graphql.${body}`)}`, extra: {} },
-    ] as { auth: string; extra: Record<string, string> }[];
+    // Serializa UMA vez — body assinado deve ser IDÊNTICO ao body enviado
+    const body = JSON.stringify({ query: gqlQuery, variables: { keyword: query, limit } });
+    const timestamp = Math.floor(Date.now() / 1000);
 
-    for (let i = 0; i < variants.length; i++) {
-      try {
-        const response = await axios.post(this.apiBase, body, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': variants[i].auth,
-            'X-Shopee-Language': 'pt-BR',
-          },
-          timeout: 15000,
-        });
+    // Formato oficial Shopee Affiliate Open API:
+    // signature = SHA256(appId + timestamp + payload + secret)
+    // Authorization: SHA256 Credential={appId}, Timestamp={timestamp}, Signature={signature}
+    const baseString = `${appId}${timestamp}${body}${secret}`;
+    const signature = createHash('sha256').update(baseString, 'utf8').digest('hex');
+    const authorization = `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`;
 
-        const gqlErrors = response.data?.errors;
-        if (gqlErrors?.length) {
-          const code = gqlErrors[0]?.extensions?.code;
-          if (code === 10020) {
-            logger.warn(`Shopee: variante ${i + 1} inválida, tentando próxima...`);
-            continue; // tenta próximo formato
-          }
-          throw new Error(gqlErrors[0]?.message ?? 'Shopee API error');
-        }
+    logger.info('Shopee: fazendo requisição', { appId, timestamp, endpoint: this.apiBase });
 
-        const nodes = response.data?.data?.productOfferV2?.nodes ?? [];
-        logger.info(`Shopee: variante ${i + 1} funcionou!`, { query, count: nodes.length });
+    try {
+      const response = await axios.post(this.apiBase, body, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authorization,
+        },
+        timeout: 15000,
+      });
 
-        return nodes.map((item: any) => ({
-          externalId: `${item.shopId}_${item.itemId}`,
-          title: item.productName,
-          price: item.priceMin ?? 0,
-          originalPrice: item.priceMax && item.priceMax > item.priceMin ? item.priceMax : undefined,
-          imageUrl: item.imageLink ?? undefined,
-          affiliateUrl: item.productLink
-            ? this.buildAffiliateUrl(item.productLink)
-            : this.buildAffiliateUrl(`https://shopee.com.br/product/${item.shopId}/${item.itemId}`),
-          platformData: { shopId: item.shopId, itemId: item.itemId, commissionRate: item.commissionRate, sales: item.sales },
-        }));
-      } catch (error: any) {
-        if (error.message?.includes('10020') || error.message?.includes('Invalid Credential')) {
-          logger.warn(`Shopee: variante ${i + 1} falhou com credencial inválida`);
-          continue;
-        }
-        logger.error('Shopee API: erro inesperado', { error: error.message });
-        throw new Error(`Shopee API: ${error.message}`);
+      const gqlErrors = response.data?.errors;
+      if (gqlErrors?.length) {
+        logger.error('Shopee API: GraphQL errors', { errors: JSON.stringify(gqlErrors) });
+        throw new Error(gqlErrors[0]?.message ?? 'Shopee API error');
       }
-    }
 
-    throw new Error('Shopee API: todas as variantes de autenticação falharam. Verifique o App ID e a Senha nas configurações da plataforma.');
+      const nodes = response.data?.data?.productOfferV2?.nodes ?? [];
+      logger.info('Shopee API: sucesso', { query, count: nodes.length });
+
+      return nodes.map((item: any) => ({
+        externalId: `${item.shopId}_${item.itemId}`,
+        title: item.productName,
+        price: item.priceMin ?? 0,
+        originalPrice: item.priceMax && item.priceMax > item.priceMin ? item.priceMax : undefined,
+        imageUrl: item.imageLink ?? undefined,
+        affiliateUrl: item.productLink
+          ? this.buildAffiliateUrl(item.productLink)
+          : this.buildAffiliateUrl(`https://shopee.com.br/product/${item.shopId}/${item.itemId}`),
+        platformData: { shopId: item.shopId, itemId: item.itemId, commissionRate: item.commissionRate, sales: item.sales },
+      }));
   }
 
   private async publicSearch(query: string, limit: number): Promise<AffiliateProduct[]> {
