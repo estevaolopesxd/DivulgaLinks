@@ -112,10 +112,17 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
         timeout: 15000,
       });
 
+      // Log de erros GraphQL (autenticação inválida vem aqui, não como HTTP 4xx)
+      const gqlErrors = response.data?.errors;
+      if (gqlErrors?.length) {
+        logger.error('Shopee API: GraphQL errors', { errors: JSON.stringify(gqlErrors) });
+        throw new Error(gqlErrors[0]?.message ?? 'Shopee API error');
+      }
+
       const nodes = response.data?.data?.productOfferV2?.nodes ?? [];
 
       if (nodes.length === 0) {
-        logger.warn('Shopee API: nenhum resultado', { query });
+        logger.warn('Shopee API: nenhum resultado', { query, rawData: JSON.stringify(response.data).slice(0, 500) });
         return [];
       }
 
