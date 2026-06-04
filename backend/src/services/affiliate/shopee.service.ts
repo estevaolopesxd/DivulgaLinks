@@ -62,7 +62,8 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const appId = this.affiliateId ?? '';
     const secret = this.apiKey ?? '';
-    const message = `${appId}${timestamp}/graphql${body}`;
+    // Formato oficial Shopee Affiliate API: timestamp + appId + path + body
+    const message = `${timestamp}${appId}/graphql${body}`;
     const sign = createHmac('sha256', secret).update(message).digest('hex');
     return `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${sign}`;
   }
