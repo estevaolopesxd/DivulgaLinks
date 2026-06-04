@@ -60,8 +60,8 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
    */
   private buildAuthHeader(body: string): string {
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const appId = this.affiliateId;
-    const secret = this.apiKey;
+    const appId = this.affiliateId ?? '';
+    const secret = this.apiKey ?? '';
     const message = `${appId}${timestamp}/graphql${body}`;
     const sign = createHmac('sha256', secret).update(message).digest('hex');
     return `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${sign}`;
