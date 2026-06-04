@@ -69,7 +69,7 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
 
     const appId = this.affiliateId ?? '';
     const secret = this.apiKey ?? '';
-    const gqlQuery = `query SearchProducts($keyword: String!, $limit: Int!) { productOfferV2(listType: 0, sortType: 2, keyword: $keyword, limit: $limit) { nodes { itemId shopId productName commissionRate priceMin priceMax imageLink productLink shopName sales } } }`;
+    const gqlQuery = `query SearchProducts($keyword: String!, $limit: Int!) { productOfferV2(listType: 0, sortType: 2, keyword: $keyword, limit: $limit) { nodes { itemId shopId productName commissionRate priceMin priceMax imageUrl productLink shopName sales } } }`;
 
     // Serializa UMA vez — body assinado deve ser IDÊNTICO ao body enviado
     const body = JSON.stringify({ query: gqlQuery, variables: { keyword: query, limit } });
@@ -107,7 +107,7 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
         title: item.productName,
         price: item.priceMin ?? 0,
         originalPrice: item.priceMax && item.priceMax > item.priceMin ? item.priceMax : undefined,
-        imageUrl: item.imageLink ?? undefined,
+        imageUrl: item.imageUrl ?? undefined,
         affiliateUrl: item.productLink
           ? this.buildAffiliateUrl(item.productLink)
           : this.buildAffiliateUrl(`https://shopee.com.br/product/${item.shopId}/${item.itemId}`),
