@@ -76,24 +76,34 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
     const body = JSON.stringify({ query: gqlQuery, variables: { keyword: query, limit } });
     const timestamp = Math.floor(Date.now() / 1000).toString();
 
-    // Tenta múltiplos formatos de assinatura que a Shopee usa
+    const secret = this.apiKey ?? '';
+
+    // Tenta múltiplos formatos — HMAC e token direto
     const variants = [
+      // ── Token direto (Senha = access token) ───────────────────────────────
+      // Formato 5: Bearer simples
+      { auth: `Bearer ${secret}`, extra: {} },
+      // Formato 6: só a chave
+      { auth: secret, extra: {} },
+      // Formato 7: appId:secret (Basic-like)
+      { auth: `${appId}:${secret}`, extra: {} },
+      // ── HMAC (Senha = segredo de assinatura) ──────────────────────────────
       // Formato 1: appId + timestamp + path + body
-      `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(appId + timestamp + '/graphql' + body)}`,
+      { auth: `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(appId + timestamp + '/graphql' + body)}`, extra: {} },
       // Formato 2: timestamp + appId + path + body
-      `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(timestamp + appId + '/graphql' + body)}`,
-      // Formato 3: sem path no corpo da assinatura
-      `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(appId + timestamp + body)}`,
-      // Formato 4: appId.timestamp./graphql.body (com pontos)
-      `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(`${appId}.${timestamp}./graphql.${body}`)}`,
-    ];
+      { auth: `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(timestamp + appId + '/graphql' + body)}`, extra: {} },
+      // Formato 3: sem path
+      { auth: `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(appId + timestamp + body)}`, extra: {} },
+      // Formato 4: com pontos
+      { auth: `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(`${appId}.${timestamp}./graphql.${body}`)}`, extra: {} },
+    ] as { auth: string; extra: Record<string, string> }[];
 
     for (let i = 0; i < variants.length; i++) {
       try {
         const response = await axios.post(this.apiBase, body, {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': variants[i],
+            'Authorization': variants[i].auth,
             'X-Shopee-Language': 'pt-BR',
           },
           timeout: 15000,
