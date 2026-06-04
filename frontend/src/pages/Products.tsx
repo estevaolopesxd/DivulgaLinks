@@ -14,7 +14,7 @@ import { Select } from '../components/ui/Select';
 import { Pagination } from '../components/ui/Pagination';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageLoader } from '../components/ui/LoadingSpinner';
-import type { Product, Platform } from '../types';
+import type { Product, Platform, PreviewProduct } from '../types';
 
 function formatBRL(n: number) {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -64,6 +64,9 @@ export const Products: React.FC = () => {
   const [importQuery, setImportQuery] = useState('');
   const [importPlatform, setImportPlatform] = useState('');
   const [importResults, setImportResults] = useState<Product[]>([]);
+  const [previewProducts, setPreviewProducts] = useState<PreviewProduct[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [importSort, setImportSort] = useState<'sales' | 'commission' | 'price'>('sales');
   const [form, setForm] = useState<ProductForm>(emptyProductForm);
 
   const { data: productsData, isLoading } = useQuery({
@@ -113,6 +116,30 @@ export const Products: React.FC = () => {
     mutationFn: ({ platformId, query }: { platformId: string; query: string }) => productsApi.importFromPlatform(platformId, query),
     onSuccess: (data) => setImportResults(data),
     onError: () => toast.error('Erro ao buscar produtos.'),
+  });
+
+  const searchPlatformMutation = useMutation({
+    mutationFn: ({ platformId, query }: { platformId: string; query: string }) =>
+      productsApi.searchFromPlatform(platformId, query, 20),
+    onSuccess: (data) => {
+      setPreviewProducts(data);
+      setSelectedIds(new Set(data.map((p) => p.externalId)));
+    },
+    onError: (err: Error) => toast.error(err.message ?? 'Erro ao buscar produtos.'),
+  });
+
+  const importSelectedMutation = useMutation({
+    mutationFn: ({ platformId, products }: { platformId: string; products: PreviewProduct[] }) =>
+      productsApi.importSelected(platformId, products),
+    onSuccess: (data) => {
+      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      setImportModalOpen(false);
+      setPreviewProducts([]);
+      setSelectedIds(new Set());
+      setImportQuery('');
+    },
+    onError: (err: Error) => toast.error(err.message ?? 'Erro ao importar.'),
   });
 
   const products = productsData?.data ?? [];
@@ -367,33 +394,158 @@ export const Products: React.FC = () => {
       </Modal>
 
       {/* Platform Import Modal */}
-      <Modal isOpen={importModalOpen} onClose={() => { setImportModalOpen(false); setImportResults([]); setImportQuery(''); }} title="Importar da Plataforma" size="xl"
-        footer={<div className="flex justify-end"><Button variant="outline" onClick={() => setImportModalOpen(false)}>Fechar</Button></div>}
+      <Modal
+        isOpen={importModalOpen}
+        onClose={() => { setImportModalOpen(false); setPreviewProducts([]); setSelectedIds(new Set()); setImportQuery(''); }}
+        title="Importar da Plataforma"
+        size="2xl"
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-gray-500">
+              {previewProducts.length > 0 && `${selectedIds.size} de ${previewProducts.length} selecionados`}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setImportModalOpen(false); setPreviewProducts([]); setSelectedIds(new Set()); }}>
+                Fechar
+              </Button>
+              {previewProducts.length > 0 && (
+                <Button
+                  variant="primary"
+                  loading={importSelectedMutation.isPending}
+                  disabled={selectedIds.size === 0}
+                  icon={<Download size={15} />}
+                  onClick={() => {
+                    const selected = previewProducts.filter((p) => selectedIds.has(p.externalId));
+                    importSelectedMutation.mutate({ platformId: importPlatform, products: selected });
+                  }}
+                >
+                  Importar {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+                </Button>
+              )}
+            </div>
+          </div>
+        }
       >
         <div className="space-y-4">
+          {/* Busca */}
           <div className="flex gap-2">
-            <Select options={[{ value: '', label: 'Selecione uma plataforma' }, ...platformOptions]} value={importPlatform} onChange={(e) => setImportPlatform(e.target.value)} containerClassName="w-48 flex-shrink-0" />
-            <Input placeholder="Buscar produtos..." value={importQuery} onChange={(e) => setImportQuery(e.target.value)} containerClassName="flex-1" leftIcon={<Search size={15} />} />
-            <Button variant="primary" loading={importPlatformMutation.isPending} disabled={!importPlatform || !importQuery}
-              onClick={() => importPlatformMutation.mutate({ platformId: importPlatform, query: importQuery })}>
+            <Select
+              options={[{ value: '', label: 'Plataforma' }, ...platformOptions]}
+              value={importPlatform}
+              onChange={(e) => { setImportPlatform(e.target.value); setPreviewProducts([]); setSelectedIds(new Set()); }}
+              containerClassName="w-40 flex-shrink-0"
+            />
+            <Input
+              placeholder="Buscar produtos..."
+              value={importQuery}
+              onChange={(e) => setImportQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && importPlatform && importQuery && searchPlatformMutation.mutate({ platformId: importPlatform, query: importQuery })}
+              containerClassName="flex-1"
+              leftIcon={<Search size={15} />}
+            />
+            <Button
+              variant="primary"
+              loading={searchPlatformMutation.isPending}
+              disabled={!importPlatform || !importQuery}
+              onClick={() => searchPlatformMutation.mutate({ platformId: importPlatform, query: importQuery })}
+            >
               Buscar
             </Button>
           </div>
-          {importResults.length > 0 && (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {importResults.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 p-3 border border-gray-100 rounded-lg hover:bg-gray-50">
-                  <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
-                    {p.imageUrl ? <img src={p.imageUrl} className="w-10 h-10 rounded object-cover" alt="" /> : <ShoppingBag size={16} className="text-gray-400" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{p.title}</p>
-                    <p className="text-xs text-gray-500">{formatBRL(p.price)}</p>
-                  </div>
-                  <Button size="xs" variant="outline" onClick={() => toast.success(`"${p.title}" adicionado!`)}>Adicionar</Button>
-                </div>
-              ))}
+
+          {/* Ordenação + selecionar tudo */}
+          {previewProducts.length > 0 && (
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Ordenar por:</span>
+                {(['sales', 'commission', 'price'] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setImportSort(s)}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      importSort === s
+                        ? 'bg-primary-500 text-white border-primary-500'
+                        : 'border-gray-300 text-gray-600 hover:border-primary-400'
+                    }`}
+                  >
+                    {s === 'sales' ? '🔥 Mais vendidos' : s === 'commission' ? '💰 Maior comissão' : '💲 Menor preço'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  if (selectedIds.size === previewProducts.length) {
+                    setSelectedIds(new Set());
+                  } else {
+                    setSelectedIds(new Set(previewProducts.map((p) => p.externalId)));
+                  }
+                }}
+                className="text-xs text-primary-600 hover:underline"
+              >
+                {selectedIds.size === previewProducts.length ? 'Desmarcar todos' : 'Selecionar todos'}
+              </button>
             </div>
+          )}
+
+          {/* Lista de produtos */}
+          {previewProducts.length > 0 && (
+            <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
+              {[...previewProducts]
+                .sort((a, b) =>
+                  importSort === 'sales' ? b.sales - a.sales
+                  : importSort === 'commission' ? b.commissionRate - a.commissionRate
+                  : a.price - b.price,
+                )
+                .map((p) => {
+                  const checked = selectedIds.has(p.externalId);
+                  const discount = p.originalPrice && p.originalPrice > p.price
+                    ? Math.round(((p.originalPrice - p.price) / p.originalPrice) * 100)
+                    : 0;
+                  return (
+                    <div
+                      key={p.externalId}
+                      onClick={() => {
+                        const next = new Set(selectedIds);
+                        if (checked) next.delete(p.externalId); else next.add(p.externalId);
+                        setSelectedIds(next);
+                      }}
+                      className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        checked ? 'border-primary-400 bg-primary-50' : 'border-gray-100 hover:bg-gray-50'
+                      }`}
+                    >
+                      <input type="checkbox" checked={checked} readOnly className="flex-shrink-0 accent-primary-500" />
+                      <div className="w-12 h-12 rounded bg-gray-100 flex-shrink-0 overflow-hidden">
+                        {p.imageUrl
+                          ? <img src={p.imageUrl} className="w-12 h-12 object-cover" alt="" />
+                          : <ShoppingBag size={18} className="text-gray-400 m-auto mt-3" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug">{p.title}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="text-sm font-bold text-green-700">{formatBRL(p.price)}</span>
+                          {discount > 0 && (
+                            <span className="text-xs line-through text-gray-400">{formatBRL(p.originalPrice!)}</span>
+                          )}
+                          {discount > 0 && (
+                            <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium">-{discount}%</span>
+                          )}
+                          {p.commissionRate > 0 && (
+                            <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">💰 {p.commissionRate}%</span>
+                          )}
+                          {p.sales > 0 && (
+                            <span className="text-xs text-gray-400">🔥 {p.sales.toLocaleString('pt-BR')} vendidos</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+
+          {searchPlatformMutation.isSuccess && previewProducts.length === 0 && (
+            <p className="text-center text-sm text-gray-400 py-4">Nenhum produto encontrado.</p>
           )}
         </div>
       </Modal>

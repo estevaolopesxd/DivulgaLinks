@@ -26,6 +26,20 @@ export interface Product {
   clicks?: number;
 }
 
+// Produto retornado pelo preview (antes de salvar no banco)
+export interface PreviewProduct {
+  externalId: string;
+  title: string;
+  price: number;
+  originalPrice?: number | null;
+  imageUrl?: string | null;
+  affiliateUrl: string;
+  category?: string | null;
+  sales: number;
+  commissionRate: number;
+  shopName?: string | null;
+}
+
 export interface WhatsAppAccount {
   id: string;
   name: string;

@@ -320,6 +320,108 @@ export const importFromUrl = async (
   }
 };
 
+// Busca produtos da plataforma SEM salvar no banco — retorna preview com sales/commissionRate
+export const searchFromPlatform = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const schema = z.object({
+      platformId: z.string().uuid(),
+      query: z.string().min(1),
+      limit: z.coerce.number().int().min(1).max(50).default(20),
+    });
+    const data = schema.parse(req.body);
+
+    const platform = await prisma.platform.findUnique({ where: { id: data.platformId } });
+    if (!platform) throw new AppError('Plataforma não encontrada', 404);
+    if (!platform.isActive) throw new AppError('Plataforma inativa', 400);
+
+    const service = getAffiliateService(platform.type, platform.affiliateId, platform.apiKey, platform.apiSecret);
+
+    let products;
+    try {
+      products = await service.searchProducts({ query: data.query, limit: data.limit });
+    } catch (err: any) {
+      throw new AppError(err.message ?? 'Erro ao buscar produtos', 422);
+    }
+
+    // Retorna os dados brutos incluindo sales e commissionRate para o frontend ordenar
+    res.json({
+      products: products.map((p) => ({
+        externalId: p.externalId,
+        title: p.title,
+        price: Number(p.price) || 0,
+        originalPrice: p.originalPrice ? Number(p.originalPrice) : null,
+        imageUrl: p.imageUrl ?? null,
+        affiliateUrl: String(p.affiliateUrl || ''),
+        category: p.category ?? null,
+        sales: (p.platformData?.sales as number) ?? 0,
+        commissionRate: (p.platformData?.commissionRate as number) ?? 0,
+        shopName: (p.platformData?.shopName as string) ?? null,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Importa lista específica de externalIds já previamente buscados
+export const importSelectedFromPlatform = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const schema = z.object({
+      platformId: z.string().uuid(),
+      products: z.array(z.object({
+        externalId: z.string(),
+        title: z.string(),
+        price: z.number(),
+        originalPrice: z.number().nullable().optional(),
+        imageUrl: z.string().nullable().optional(),
+        affiliateUrl: z.string(),
+        category: z.string().nullable().optional(),
+      })).min(1),
+    });
+    const data = schema.parse(req.body);
+
+    const platform = await prisma.platform.findUnique({ where: { id: data.platformId } });
+    if (!platform) throw new AppError('Plataforma não encontrada', 404);
+
+    const created = await prisma.$transaction(
+      data.products.map((p) => {
+        const externalId = p.externalId;
+        return prisma.product.upsert({
+          where: { id: uuidv4() },
+          create: {
+            title: p.title,
+            price: Number(p.price) || 0,
+            originalPrice: p.originalPrice ? Number(p.originalPrice) : null,
+            imageUrl: p.imageUrl ?? null,
+            affiliateUrl: String(p.affiliateUrl || ''),
+            platformId: platform.id,
+            externalId,
+            category: p.category ?? null,
+            tags: [],
+            isActive: true,
+          },
+          update: {},
+        });
+      }),
+    );
+
+    res.status(201).json({
+      message: `${created.length} produto(s) importado(s) de ${platform.name}`,
+      products: created,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const importFromPlatform = async (
   req: Request,
   res: Response,

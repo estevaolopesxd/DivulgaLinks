@@ -25,6 +25,7 @@ import type {
   MessageTemplate,
   InstagramAccount,
   InstagramPost,
+  PreviewProduct,
 } from '../types';
 
 const api = axios.create({
@@ -143,6 +144,14 @@ export const productsApi = {
     const res = await api.post<{ imported: number; errors: string[] }>('/api/products/import/csv', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return res.data;
+  },
+  searchFromPlatform: async (platformId: string, query: string, limit = 20) => {
+    const res = await api.post<{ products: PreviewProduct[] }>('/api/products/search/platform', { platformId, query, limit });
+    return res.data.products;
+  },
+  importSelected: async (platformId: string, products: PreviewProduct[]) => {
+    const res = await api.post<{ message: string; products: Product[] }>('/api/products/import/selected', { platformId, products });
     return res.data;
   },
   importFromPlatform: async (platformId: string, query: string) => {

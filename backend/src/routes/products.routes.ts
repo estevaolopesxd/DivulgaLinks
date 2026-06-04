@@ -9,6 +9,8 @@ import {
   importCSV,
   importFromPlatform,
   importFromUrl,
+  searchFromPlatform,
+  importSelectedFromPlatform,
   generateTrackingUrl,
 } from '../controllers/products.controller';
 import { authMiddleware } from '../middleware/auth';
@@ -54,11 +56,17 @@ router.delete('/:id', deleteProduct);
 // POST /api/products/import/csv
 router.post('/import/csv', upload.single('file'), importCSV);
 
-// POST /api/products/import/platform
+// POST /api/products/import/platform  (importa todos)
 router.post('/import/platform', importFromPlatform);
 
 // POST /api/products/import/url
 router.post('/import/url', importFromUrl);
+
+// POST /api/products/search/platform  (busca preview, não salva)
+router.post('/search/platform', searchFromPlatform);
+
+// POST /api/products/import/selected  (importa selecionados)
+router.post('/import/selected', importSelectedFromPlatform);
 
 // POST /api/products/:id/tracking-url
 router.post('/:id/tracking-url', generateTrackingUrl);
