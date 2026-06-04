@@ -113,6 +113,11 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
           : this.buildAffiliateUrl(`https://shopee.com.br/product/${item.shopId}/${item.itemId}`),
         platformData: { shopId: item.shopId, itemId: item.itemId, commissionRate: item.commissionRate, sales: item.sales },
       }));
+    } catch (error: any) {
+      const msg = error?.response?.data?.errors?.[0]?.message ?? error.message;
+      logger.error('Shopee API: erro na busca', { query, error: msg });
+      throw new Error(`Shopee API: ${msg}`);
+    }
   }
 
   private async publicSearch(query: string, limit: number): Promise<AffiliateProduct[]> {
