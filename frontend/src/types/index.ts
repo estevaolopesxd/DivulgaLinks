@@ -1,7 +1,7 @@
 export interface Platform {
   id: string;
   name: string;
-  type: 'AMAZON' | 'MERCADO_LIVRE' | 'SHOPEE' | 'ALIEXPRESS' | 'AWIN' | 'MAGALU';
+  type: 'AMAZON' | 'MERCADO_LIVRE' | 'SHOPEE' | 'ALIEXPRESS' | 'AWIN' | 'MAGALU' | 'TIKTOK_SHOP';
   affiliateId: string;
   apiKey?: string;
   isActive: boolean;

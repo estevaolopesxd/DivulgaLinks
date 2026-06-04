@@ -23,6 +23,7 @@ enum PlatformType {
   ALIEXPRESS
   AWIN
   MAGALU
+  TIKTOK_SHOP
 }
 
 enum WhatsAppStatus {

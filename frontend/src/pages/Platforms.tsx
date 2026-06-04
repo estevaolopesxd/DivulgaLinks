@@ -13,30 +13,33 @@ import { PageLoader } from '../components/ui/LoadingSpinner';
 import type { Platform } from '../types';
 
 const PLATFORM_TYPES = [
-  { value: 'AMAZON', label: 'Amazon' },
-  { value: 'MERCADO_LIVRE', label: 'Mercado Livre' },
-  { value: 'SHOPEE', label: 'Shopee' },
-  { value: 'ALIEXPRESS', label: 'AliExpress' },
-  { value: 'AWIN', label: 'Awin' },
-  { value: 'MAGALU', label: 'Magalu' },
+  { value: 'AMAZON',       label: 'Amazon' },
+  { value: 'MERCADO_LIVRE',label: 'Mercado Livre' },
+  { value: 'SHOPEE',       label: 'Shopee' },
+  { value: 'TIKTOK_SHOP',  label: 'TikTok Shop' },
+  { value: 'ALIEXPRESS',   label: 'AliExpress' },
+  { value: 'AWIN',         label: 'Awin' },
+  { value: 'MAGALU',       label: 'Magalu' },
 ];
 
 const PLATFORM_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  AMAZON: { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' },
-  MERCADO_LIVRE: { bg: 'bg-yellow-50', text: 'text-yellow-600', border: 'border-yellow-200' },
-  SHOPEE: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
-  ALIEXPRESS: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
-  AWIN: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
-  MAGALU: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+  AMAZON:       { bg: 'bg-orange-50',  text: 'text-orange-600', border: 'border-orange-200' },
+  MERCADO_LIVRE:{ bg: 'bg-yellow-50',  text: 'text-yellow-600', border: 'border-yellow-200' },
+  SHOPEE:       { bg: 'bg-red-50',     text: 'text-red-600',    border: 'border-red-200' },
+  TIKTOK_SHOP:  { bg: 'bg-pink-50',   text: 'text-pink-600',   border: 'border-pink-200' },
+  ALIEXPRESS:   { bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200' },
+  AWIN:         { bg: 'bg-blue-50',    text: 'text-blue-600',   border: 'border-blue-200' },
+  MAGALU:       { bg: 'bg-blue-50',    text: 'text-blue-700',   border: 'border-blue-200' },
 };
 
 const PLATFORM_EMOJIS: Record<string, string> = {
-  AMAZON: '🛒',
-  MERCADO_LIVRE: '🛍️',
-  SHOPEE: '🛍️',
-  ALIEXPRESS: '📦',
-  AWIN: '🔗',
-  MAGALU: '🏪',
+  AMAZON:       '🛒',
+  MERCADO_LIVRE:'🛍️',
+  SHOPEE:       '🛍️',
+  TIKTOK_SHOP:  '🎵',
+  ALIEXPRESS:   '📦',
+  AWIN:         '🔗',
+  MAGALU:       '🏪',
 };
 
 interface PlatformFormData {
@@ -44,7 +47,11 @@ interface PlatformFormData {
   type: Platform['type'] | '';
   affiliateId: string;
   apiKey: string;
+  apiSecret: string;
   isActive: boolean;
+  // TikTok Shop extras (guardados em config)
+  tiktokAccessToken: string;
+  tiktokShopCipher: string;
 }
 
 const emptyForm: PlatformFormData = {
@@ -52,7 +59,10 @@ const emptyForm: PlatformFormData = {
   type: '',
   affiliateId: '',
   apiKey: '',
+  apiSecret: '',
   isActive: true,
+  tiktokAccessToken: '',
+  tiktokShopCipher: '',
 };
 
 export const Platforms: React.FC = () => {
@@ -115,7 +125,14 @@ export const Platforms: React.FC = () => {
 
   const openEdit = (p: Platform) => {
     setEditTarget(p);
-    setForm({ name: p.name, type: p.type, affiliateId: p.affiliateId, apiKey: p.apiKey ?? '', isActive: p.isActive });
+    const cfg = (p as any).config ?? {};
+    setForm({
+      name: p.name, type: p.type, affiliateId: p.affiliateId,
+      apiKey: p.apiKey ?? '', apiSecret: (p as any).apiSecret ?? '',
+      isActive: p.isActive,
+      tiktokAccessToken: cfg.accessToken ?? '',
+      tiktokShopCipher:  cfg.shopCipher  ?? '',
+    });
     setModalOpen(true);
   };
 
@@ -128,7 +145,23 @@ export const Platforms: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.type) return toast.error('Selecione o tipo de plataforma.');
-    const payload = { name: form.name, type: form.type as Platform['type'], affiliateId: form.affiliateId, apiKey: form.apiKey || undefined, isActive: form.isActive };
+    const isTikTok = form.type === 'TIKTOK_SHOP';
+    const payload: any = {
+      name: form.name,
+      type: form.type as Platform['type'],
+      affiliateId: form.affiliateId,
+      apiKey: form.apiKey || undefined,
+      apiSecret: form.apiSecret || undefined,
+      isActive: form.isActive,
+      ...(isTikTok && {
+        config: {
+          appKey:      form.apiKey,
+          appSecret:   form.apiSecret,
+          accessToken: form.tiktokAccessToken,
+          shopCipher:  form.tiktokShopCipher,
+        },
+      }),
+    };
     if (editTarget) {
       updateMutation.mutate({ id: editTarget.id, data: payload });
     } else {
@@ -270,22 +303,65 @@ export const Platforms: React.FC = () => {
                 : undefined
             }
           />
-          <Input
-            label="Chave de API (opcional)"
-            type="password"
-            placeholder={
-              form.type === 'MERCADO_LIVRE'
-                ? 'Access Token do app ML (se tiver app próprio cadastrado)'
-                : 'Chave de API se necessário'
-            }
-            value={form.apiKey}
-            onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
-            hint={
-              form.type === 'MERCADO_LIVRE'
-                ? 'Opcional — necessário apenas se você tiver um App registrado no ML Developers'
-                : undefined
-            }
-          />
+          {form.type !== 'TIKTOK_SHOP' && (
+            <Input
+              label="Chave de API (opcional)"
+              type="password"
+              placeholder={
+                form.type === 'SHOPEE' ? 'Senha do App (do portal de afiliados Shopee)' :
+                form.type === 'MERCADO_LIVRE' ? 'App ID do ML Developers' :
+                'Chave de API se necessário'
+              }
+              value={form.apiKey}
+              onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
+            />
+          )}
+
+          {/* Campos específicos TikTok Shop */}
+          {form.type === 'TIKTOK_SHOP' && (
+            <div className="space-y-3 rounded-xl border border-pink-200 bg-pink-50 p-4">
+              <p className="text-xs font-semibold text-pink-800">
+                🎵 TikTok Shop — obtenha as credenciais em{' '}
+                <a href="https://partner.tiktokshop.com" target="_blank" rel="noreferrer" className="underline">
+                  partner.tiktokshop.com
+                </a>
+              </p>
+              <Input
+                label="App Key"
+                required
+                placeholder="Ex: abcdef123456"
+                value={form.apiKey}
+                onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
+                hint="Partner Center → Seu App → App Key"
+              />
+              <Input
+                label="App Secret"
+                type="password"
+                required
+                placeholder="Ex: abc123..."
+                value={form.apiSecret}
+                onChange={(e) => setForm((f) => ({ ...f, apiSecret: e.target.value }))}
+                hint="Partner Center → Seu App → App Secret"
+              />
+              <Input
+                label="Access Token"
+                type="password"
+                required
+                placeholder="Token gerado via OAuth do TikTok Shop"
+                value={form.tiktokAccessToken}
+                onChange={(e) => setForm((f) => ({ ...f, tiktokAccessToken: e.target.value }))}
+                hint="Gerado após autorizar sua conta no fluxo OAuth"
+              />
+              <Input
+                label="Shop Cipher (opcional)"
+                placeholder="Cipher da loja — deixe vazio para busca geral"
+                value={form.tiktokShopCipher}
+                onChange={(e) => setForm((f) => ({ ...f, tiktokShopCipher: e.target.value }))}
+                hint="Obtido via GET /authorization/202309/shops após o OAuth"
+              />
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <button
               type="button"

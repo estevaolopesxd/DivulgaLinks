@@ -10,6 +10,7 @@ import { parseProductsCSV } from '../utils/csvParser';
 import { AmazonAffiliateService } from '../services/affiliate/amazon.service';
 import { MercadoLivreAffiliateService } from '../services/affiliate/mercadolivre.service';
 import { ShopeeAffiliateService } from '../services/affiliate/shopee.service';
+import { TikTokShopAffiliateService } from '../services/affiliate/tiktok.service';
 import { BaseAffiliateService } from '../services/affiliate/base';
 
 const productSchema = z.object({
@@ -244,6 +245,7 @@ const getAffiliateService = (
   affiliateId: string,
   apiKey?: string | null,
   apiSecret?: string | null,
+  config?: Record<string, unknown> | null,
 ): BaseAffiliateService => {
   switch (type) {
     case PlatformType.AMAZON:
@@ -252,6 +254,18 @@ const getAffiliateService = (
       return new MercadoLivreAffiliateService(affiliateId, apiKey ?? undefined, apiSecret ?? undefined);
     case PlatformType.SHOPEE:
       return new ShopeeAffiliateService(affiliateId, apiKey ?? undefined, apiSecret ?? undefined);
+    case PlatformType.TIKTOK_SHOP:
+      return new TikTokShopAffiliateService(
+        affiliateId,
+        apiKey ?? undefined,
+        apiSecret ?? undefined,
+        {
+          appKey:      apiKey ?? '',
+          appSecret:   apiSecret ?? '',
+          accessToken: (config?.accessToken as string) ?? '',
+          shopCipher:  (config?.shopCipher  as string) ?? '',
+        },
+      );
     default:
       throw new AppError(`Affiliate service not available for platform type: ${type}`, 400);
   }
@@ -273,7 +287,7 @@ export const importFromUrl = async (
     if (!platform) throw new AppError('Plataforma não encontrada', 404);
     if (!platform.isActive) throw new AppError('Plataforma inativa', 400);
 
-    const service = getAffiliateService(platform.type, platform.affiliateId, platform.apiKey, platform.apiSecret);
+    const service = getAffiliateService(platform.type, platform.affiliateId, platform.apiKey, platform.apiSecret, platform.config as Record<string, unknown> | null);
 
     // Extrai IDs do produto a partir da URL
     const ids = (service as any).extractProductIds?.(url);
@@ -338,7 +352,7 @@ export const searchFromPlatform = async (
     if (!platform) throw new AppError('Plataforma não encontrada', 404);
     if (!platform.isActive) throw new AppError('Plataforma inativa', 400);
 
-    const service = getAffiliateService(platform.type, platform.affiliateId, platform.apiKey, platform.apiSecret);
+    const service = getAffiliateService(platform.type, platform.affiliateId, platform.apiKey, platform.apiSecret, platform.config as Record<string, unknown> | null);
 
     let products;
     try {
@@ -453,6 +467,7 @@ export const importFromPlatform = async (
       platform.affiliateId,
       platform.apiKey,
       platform.apiSecret,
+      platform.config as Record<string, unknown> | null,
     );
 
     let affiliateProducts;
