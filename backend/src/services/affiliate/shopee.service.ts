@@ -102,17 +102,23 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
       const nodes = response.data?.data?.productOfferV2?.nodes ?? [];
       logger.info('Shopee API: sucesso', { query, count: nodes.length });
 
-      return nodes.map((item: any) => ({
-        externalId: `${item.shopId}_${item.itemId}`,
-        title: item.productName,
-        price: item.priceMin ?? 0,
-        originalPrice: item.priceMax && item.priceMax > item.priceMin ? item.priceMax : undefined,
-        imageUrl: item.imageUrl ?? undefined,
-        affiliateUrl: item.productLink
-          ? this.buildAffiliateUrl(item.productLink)
-          : this.buildAffiliateUrl(`https://shopee.com.br/product/${item.shopId}/${item.itemId}`),
-        platformData: { shopId: item.shopId, itemId: item.itemId, commissionRate: item.commissionRate, sales: item.sales },
-      }));
+      return nodes.map((item: any) => {
+        const priceMin = parseFloat(item.priceMin) || 0;
+        const priceMax = parseFloat(item.priceMax) || 0;
+        const productUrl = item.productLink
+          || (item.shopId && item.itemId
+            ? `https://shopee.com.br/product/${item.shopId}/${item.itemId}`
+            : 'https://shopee.com.br');
+        return {
+          externalId: `${item.shopId ?? 'unknown'}_${item.itemId ?? Date.now()}`,
+          title: item.productName ?? 'Produto Shopee',
+          price: priceMin,
+          originalPrice: priceMax > priceMin ? priceMax : undefined,
+          imageUrl: item.imageUrl ?? undefined,
+          affiliateUrl: this.buildAffiliateUrl(productUrl),
+          platformData: { shopId: item.shopId, itemId: item.itemId, commissionRate: item.commissionRate, sales: item.sales },
+        };
+      });
     } catch (error: any) {
       const msg = error?.response?.data?.errors?.[0]?.message ?? error.message;
       logger.error('Shopee API: erro na busca', { query, error: msg });
