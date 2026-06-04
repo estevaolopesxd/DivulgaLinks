@@ -186,8 +186,8 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
       }
     }
 
-    logger.error('Shopee: all public search endpoints failed', { query });
-    throw new Error('Shopee: não foi possível buscar produtos. Configure o App ID e Secret da API Oficial da Shopee Affiliates em Plataformas para habilitar a busca.');
+    logger.error('Shopee: all public search endpoints failed — API key required', { query });
+    return [];
   }
 
   async getProduct(externalId: string): Promise<AffiliateProduct | null> {
