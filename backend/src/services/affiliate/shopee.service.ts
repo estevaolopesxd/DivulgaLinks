@@ -58,14 +58,8 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
    * Formato: SHA256 Hmac appid={appId},timestamp={ts},sign={hmac}
    * Assinatura: HMAC-SHA256(appSecret, appId + timestamp + "/graphql" + body)
    */
-  private buildAuthHeader(body: string): string {
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const appId = this.affiliateId ?? '';
-    const secret = this.apiKey ?? '';
-    // Formato oficial Shopee Affiliate API: timestamp + appId + path + body
-    const message = `${timestamp}${appId}/graphql${body}`;
-    const sign = createHmac('sha256', secret).update(message).digest('hex');
-    return `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${sign}`;
+  private buildSign(message: string): string {
+    return createHmac('sha256', this.apiKey ?? '').update(message).digest('hex');
   }
 
   async searchProducts(options: SearchOptions): Promise<AffiliateProduct[]> {
@@ -77,78 +71,69 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
       return this.publicSearch(query, limit);
     }
 
-    const graphqlQuery = `
-      query SearchProducts($keyword: String!, $limit: Int!) {
-        productOfferV2(
-          listType: 0
-          sortType: 2
-          keyword: $keyword
-          limit: $limit
-        ) {
-          nodes {
-            itemId
-            shopId
-            productName
-            commissionRate
-            priceMin
-            priceMax
-            imageLink
-            productLink
-            shopName
-            sales
+    const appId = this.affiliateId ?? '';
+    const gqlQuery = `query SearchProducts($keyword: String!, $limit: Int!) { productOfferV2(listType: 0, sortType: 2, keyword: $keyword, limit: $limit) { nodes { itemId shopId productName commissionRate priceMin priceMax imageLink productLink shopName sales } } }`;
+    const body = JSON.stringify({ query: gqlQuery, variables: { keyword: query, limit } });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+
+    // Tenta múltiplos formatos de assinatura que a Shopee usa
+    const variants = [
+      // Formato 1: appId + timestamp + path + body
+      `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(appId + timestamp + '/graphql' + body)}`,
+      // Formato 2: timestamp + appId + path + body
+      `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(timestamp + appId + '/graphql' + body)}`,
+      // Formato 3: sem path no corpo da assinatura
+      `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(appId + timestamp + body)}`,
+      // Formato 4: appId.timestamp./graphql.body (com pontos)
+      `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${this.buildSign(`${appId}.${timestamp}./graphql.${body}`)}`,
+    ];
+
+    for (let i = 0; i < variants.length; i++) {
+      try {
+        const response = await axios.post(this.apiBase, body, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': variants[i],
+            'X-Shopee-Language': 'pt-BR',
+          },
+          timeout: 15000,
+        });
+
+        const gqlErrors = response.data?.errors;
+        if (gqlErrors?.length) {
+          const code = gqlErrors[0]?.extensions?.code;
+          if (code === 10020) {
+            logger.warn(`Shopee: variante ${i + 1} inválida, tentando próxima...`);
+            continue; // tenta próximo formato
           }
+          throw new Error(gqlErrors[0]?.message ?? 'Shopee API error');
         }
+
+        const nodes = response.data?.data?.productOfferV2?.nodes ?? [];
+        logger.info(`Shopee: variante ${i + 1} funcionou!`, { query, count: nodes.length });
+
+        return nodes.map((item: any) => ({
+          externalId: `${item.shopId}_${item.itemId}`,
+          title: item.productName,
+          price: item.priceMin ?? 0,
+          originalPrice: item.priceMax && item.priceMax > item.priceMin ? item.priceMax : undefined,
+          imageUrl: item.imageLink ?? undefined,
+          affiliateUrl: item.productLink
+            ? this.buildAffiliateUrl(item.productLink)
+            : this.buildAffiliateUrl(`https://shopee.com.br/product/${item.shopId}/${item.itemId}`),
+          platformData: { shopId: item.shopId, itemId: item.itemId, commissionRate: item.commissionRate, sales: item.sales },
+        }));
+      } catch (error: any) {
+        if (error.message?.includes('10020') || error.message?.includes('Invalid Credential')) {
+          logger.warn(`Shopee: variante ${i + 1} falhou com credencial inválida`);
+          continue;
+        }
+        logger.error('Shopee API: erro inesperado', { error: error.message });
+        throw new Error(`Shopee API: ${error.message}`);
       }
-    `;
-
-    const body = JSON.stringify({ query: graphqlQuery, variables: { keyword: query, limit } });
-
-    try {
-      const response = await axios.post(this.apiBase, body, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': this.buildAuthHeader(body),
-          'X-Shopee-Language': 'pt-BR',
-        },
-        timeout: 15000,
-      });
-
-      // Log de erros GraphQL (autenticação inválida vem aqui, não como HTTP 4xx)
-      const gqlErrors = response.data?.errors;
-      if (gqlErrors?.length) {
-        logger.error('Shopee API: GraphQL errors', { errors: JSON.stringify(gqlErrors) });
-        throw new Error(gqlErrors[0]?.message ?? 'Shopee API error');
-      }
-
-      const nodes = response.data?.data?.productOfferV2?.nodes ?? [];
-
-      if (nodes.length === 0) {
-        logger.warn('Shopee API: nenhum resultado', { query, rawData: JSON.stringify(response.data).slice(0, 500) });
-        return [];
-      }
-
-      return nodes.map((item: any) => ({
-        externalId: `${item.shopId}_${item.itemId}`,
-        title: item.productName,
-        price: item.priceMin ?? 0,
-        originalPrice: item.priceMax && item.priceMax > item.priceMin ? item.priceMax : undefined,
-        imageUrl: item.imageLink ?? undefined,
-        affiliateUrl: item.productLink
-          ? this.buildAffiliateUrl(item.productLink)
-          : this.buildAffiliateUrl(`https://shopee.com.br/product/${item.shopId}/${item.itemId}`),
-        platformData: {
-          shopId: item.shopId,
-          itemId: item.itemId,
-          commissionRate: item.commissionRate,
-          sales: item.sales,
-          shopName: item.shopName,
-        },
-      }));
-    } catch (error: any) {
-      const msg = error?.response?.data?.errors?.[0]?.message ?? error.message;
-      logger.error('Shopee API: erro na busca', { query, error: msg });
-      throw new Error(`Shopee API: ${msg}`);
     }
+
+    throw new Error('Shopee API: todas as variantes de autenticação falharam. Verifique o App ID e a Senha nas configurações da plataforma.');
   }
 
   private async publicSearch(query: string, limit: number): Promise<AffiliateProduct[]> {
