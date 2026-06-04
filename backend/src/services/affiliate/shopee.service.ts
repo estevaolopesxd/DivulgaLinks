@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createHmac } from 'crypto';
 import { BaseAffiliateService, AffiliateProduct, SearchOptions } from './base';
 import { logger } from '../../utils/logger';
 
@@ -52,70 +53,93 @@ export class ShopeeAffiliateService extends BaseAffiliateService {
     return null;
   }
 
+  /**
+   * Gera o header Authorization com HMAC-SHA256 para a API Oficial da Shopee Affiliates.
+   * Formato: SHA256 Hmac appid={appId},timestamp={ts},sign={hmac}
+   * Assinatura: HMAC-SHA256(appSecret, appId + timestamp + "/graphql" + body)
+   */
+  private buildAuthHeader(body: string): string {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const appId = this.affiliateId;
+    const secret = this.apiKey;
+    const message = `${appId}${timestamp}/graphql${body}`;
+    const sign = createHmac('sha256', secret).update(message).digest('hex');
+    return `SHA256 Hmac appid=${appId},timestamp=${timestamp},sign=${sign}`;
+  }
+
   async searchProducts(options: SearchOptions): Promise<AffiliateProduct[]> {
-    try {
-      const { query, limit = 10 } = options;
-      logger.info('Shopee: searching products', { query, limit });
+    const { query, limit = 10 } = options;
+    logger.info('Shopee: searching products', { query, limit });
 
-      // Shopee Affiliate API uses GraphQL
-      // Requires approved affiliate account and API credentials
-      if (!this.apiKey) {
-        logger.warn('Shopee: API key not provided, using public search');
-        return this.publicSearch(query, limit);
-      }
+    if (!this.apiKey) {
+      logger.warn('Shopee: API key not configured, trying public search');
+      return this.publicSearch(query, limit);
+    }
 
-      const graphqlQuery = `
-        query SearchProducts($keyword: String!, $limit: Int!) {
-          productOfferV2(
-            listType: 0
-            sortType: 2
-            keyword: $keyword
-            limit: $limit
-          ) {
-            nodes {
-              itemId
-              shopId
-              title: productName
-              commissionRate
-              price
-              imageUrl: imageLink
-              productLink
-              shopName
-              sales
-            }
+    const graphqlQuery = `
+      query SearchProducts($keyword: String!, $limit: Int!) {
+        productOfferV2(
+          listType: 0
+          sortType: 2
+          keyword: $keyword
+          limit: $limit
+        ) {
+          nodes {
+            itemId
+            shopId
+            productName
+            commissionRate
+            priceMin
+            priceMax
+            imageLink
+            productLink
+            shopName
+            sales
           }
         }
-      `;
+      }
+    `;
 
-      const response = await axios.post(
-        this.apiBase,
-        { query: graphqlQuery, variables: { keyword: query, limit } },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          timeout: 10000,
+    const body = JSON.stringify({ query: graphqlQuery, variables: { keyword: query, limit } });
+
+    try {
+      const response = await axios.post(this.apiBase, body, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': this.buildAuthHeader(body),
+          'X-Shopee-Language': 'pt-BR',
         },
-      );
+        timeout: 15000,
+      });
 
       const nodes = response.data?.data?.productOfferV2?.nodes ?? [];
+
+      if (nodes.length === 0) {
+        logger.warn('Shopee API: nenhum resultado', { query });
+        return [];
+      }
+
       return nodes.map((item: any) => ({
         externalId: `${item.shopId}_${item.itemId}`,
-        title: item.title,
-        price: item.price,
-        imageUrl: item.imageUrl,
-        affiliateUrl: this.buildAffiliateUrl(item.productLink),
+        title: item.productName,
+        price: item.priceMin ?? 0,
+        originalPrice: item.priceMax && item.priceMax > item.priceMin ? item.priceMax : undefined,
+        imageUrl: item.imageLink ?? undefined,
+        affiliateUrl: item.productLink
+          ? this.buildAffiliateUrl(item.productLink)
+          : this.buildAffiliateUrl(`https://shopee.com.br/product/${item.shopId}/${item.itemId}`),
         platformData: {
           shopId: item.shopId,
           itemId: item.itemId,
           commissionRate: item.commissionRate,
           sales: item.sales,
+          shopName: item.shopName,
         },
       }));
-    } catch (error) {
-      logger.error('Shopee: search failed', { error });
-      throw new Error(`Shopee search failed: ${(error as Error).message}`);
+    } catch (error: any) {
+      const msg = error?.response?.data?.errors?.[0]?.message ?? error.message;
+      logger.error('Shopee API: erro na busca', { query, error: msg });
+      throw new Error(`Shopee API: ${msg}`);
     }
   }
 
