@@ -353,10 +353,16 @@ export const importFromPlatform = async (
       platform.apiSecret,
     );
 
-    const affiliateProducts = await service.searchProducts({
-      query: data.query,
-      limit: data.limit,
-    });
+    let affiliateProducts;
+    try {
+      affiliateProducts = await service.searchProducts({
+        query: data.query,
+        limit: data.limit,
+      });
+    } catch (searchErr: any) {
+      // Retorna 422 com a mensagem real da API em vez de 500 genérico
+      throw new AppError(searchErr.message ?? 'Erro ao buscar produtos na plataforma', 422);
+    }
 
     if (affiliateProducts.length === 0) {
       res.json({ message: 'Nenhum produto encontrado para essa busca.', products: [] });
